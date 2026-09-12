@@ -1,0 +1,6 @@
+{
+  "name": "SkyGuardAI - AWS Anomaly Detection Platform",
+  "description": "AI/ML-based intelligent anomaly detection and diagnosis for Automatic Weather Stations (AWS) across Andhra Pradesh (SIH26073).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

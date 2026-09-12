@@ -1,0 +1,56 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Node / React
+node_modules/
+dist/
+.next/
+.nuxt/
+.vite/
+
+# Databases / runtime files
+*.db
+*.db-shm
+*.db-wal
+
+# Large datasets
+*.csv
+*.csv.gz
+*.zip
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Python model artifacts
+*.pkl
+
+# Logs
+*.log
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp
+
+antigravity/
+dashboard/
+Data/
+
+
+# Required backend runtime assets
+!BACKEND/stations.csv
+!BACKEND/model_anomaly_detector.pkl
+!BACKEND/model_weather_or_sensor.pkl

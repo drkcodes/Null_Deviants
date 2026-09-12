@@ -1,0 +1,21 @@
+station_id,station_name,district,region,latitude,longitude,elevation_m,nearest_station_id,nearest_station_distance_km
+AWS_AP01,Visakhapatnam,Visakhapatnam,Coastal,17.6868,83.2185,45,AWS_AP16,50.31
+AWS_AP02,Vijayawada,NTR,Coastal,16.5062,80.648,20,AWS_AP04,31.64
+AWS_AP03,Tirupati,Tirupati,Rayalaseema,13.6288,79.4192,180,AWS_AP11,57.31
+AWS_AP04,Guntur,Guntur,Coastal,16.3067,80.4365,28,AWS_AP02,31.64
+AWS_AP05,Kurnool,Kurnool,Rayalaseema,15.8281,78.0373,281,AWS_AP17,131.79
+AWS_AP06,Kakinada,Kakinada,Coastal,16.9891,82.2475,4,AWS_AP10,47.18
+AWS_AP07,Nellore,SPSR Nellore,Coastal,14.4426,79.9865,20,AWS_AP03,109.24
+AWS_AP08,Kadapa,YSR Kadapa,Rayalaseema,14.4673,78.8242,138,AWS_AP17,43.26
+AWS_AP09,Anantapur,Anantapur,Rayalaseema,14.6819,77.6006,350,AWS_AP18,95.63
+AWS_AP10,Rajahmundry,East Godavari,Coastal,17.0005,81.804,28,AWS_AP06,47.18
+AWS_AP11,Chittoor,Chittoor,Rayalaseema,13.2172,79.1003,331,AWS_AP03,57.31
+AWS_AP12,Srikakulam,Srikakulam,Coastal,18.2949,83.8938,30,AWS_AP16,56.63
+AWS_AP13,Ongole,Prakasam,Coastal,15.5057,80.0499,15,AWS_AP04,98.19
+AWS_AP14,Eluru,West Godavari,Coastal,16.7107,81.0952,25,AWS_AP19,48.99
+AWS_AP15,Machilipatnam,Krishna,Coastal,16.1875,81.1389,2,AWS_AP19,56.95
+AWS_AP16,Vizianagaram,Vizianagaram,Coastal,18.1067,83.3956,123,AWS_AP01,50.31
+AWS_AP17,Proddatur,YSR Kadapa,Rayalaseema,14.7502,78.5482,156,AWS_AP08,43.26
+AWS_AP18,Hindupur,Sri Sathya Sai,Rayalaseema,13.8285,77.491,515,AWS_AP09,95.63
+AWS_AP19,Bhimavaram,West Godavari,Coastal,16.5449,81.5212,7,AWS_AP14,48.99
+AWS_AP20,Madanapalle,Annamayya,Rayalaseema,13.5503,78.5027,620,AWS_AP11,74.5

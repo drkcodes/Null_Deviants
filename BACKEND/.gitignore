@@ -1,0 +1,4 @@
+__pycache__/
+*.db
+SIH26073_AP_AWS_observations.csv
+SIH26073_AP_AWS_observations.csv.gz
