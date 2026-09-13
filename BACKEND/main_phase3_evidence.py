@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 import pandas as pd
-import numpy as np
 import joblib
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
@@ -743,7 +742,6 @@ def _calculate_network_evidence(
     current_context,
     previous_context,
     features,
-    station_history=None,
 ):
     """
     Calculate explicit spatiotemporal evidence.
@@ -1016,188 +1014,6 @@ def _calculate_network_evidence(
     )
 
     # --------------------------------------------------------
-    # Progressive sensor drift evidence.
-    # --------------------------------------------------------
-
-    progressive_drift = 0.0
-    directional_consistency_value = 0.0
-    persistence_value = 0.0
-    persistence_run_length = 0
-    cumulative_abnormality_value = 0.0
-
-    if (
-        station_history is not None
-        and not station_history.empty
-        and "timestamp" in station_history.columns
-        and "temperature_c" in station_history.columns
-    ):
-        drift_history = station_history.copy()
-        drift_history["timestamp"] = pd.to_datetime(
-            drift_history["timestamp"],
-            errors="coerce",
-        )
-        drift_history["temperature_c"] = pd.to_numeric(
-            drift_history["temperature_c"],
-            errors="coerce",
-        )
-        drift_history = drift_history.dropna(
-            subset=["timestamp", "temperature_c"]
-        ).sort_values("timestamp")
-
-        if len(drift_history) >= 10:
-            temperatures = drift_history[
-                "temperature_c"
-            ].to_numpy(dtype=float)
-            deltas = np.diff(temperatures)
-
-            recent_delta_count = min(5, len(deltas) - 8)
-            historical_deltas = deltas[:-recent_delta_count]
-            recent_deltas = deltas[-recent_delta_count:]
-
-            if (
-                len(historical_deltas) >= 8
-                and len(recent_deltas) >= 3
-            ):
-                if len(recent_deltas) >= 3:
-                    dominant_direction = np.sign(
-                        np.sum(recent_deltas)
-                    )
-
-                    if dominant_direction == 0:
-                        dominant_direction = 1.0
-                    directional = (
-                        recent_deltas
-                        * dominant_direction
-                    )
-                    supporting = directional > 0
-                    directional_count = int(
-                        supporting.sum()
-                    )
-
-                    directional_consistency = (
-                        directional_count
-                        / len(recent_deltas)
-                    )
-                    directional_consistency_value = (
-                        directional_consistency
-                    )
-
-                    persistence_count = 0
-                    for supports_direction in supporting[::-1]:
-                        if not supports_direction:
-                            break
-                        persistence_count += 1
-
-                    persistence = _clip01(
-                        persistence_count
-                        / len(recent_deltas)
-                    )
-                    persistence_value = persistence
-                    persistence_run_length = persistence_count
-
-                    recent_directional_displacement = float(
-                        np.sum(
-                            np.abs(
-                                recent_deltas[supporting]
-                            )
-                        )
-                    )
-
-                    historical_absolute = np.abs(
-                        historical_deltas
-                    )
-                    expected_windows = []
-                    window_size = len(recent_deltas)
-
-                    if len(historical_absolute) >= window_size:
-                        for window_start in range(
-                            len(historical_absolute)
-                            - window_size
-                            + 1
-                        ):
-                            expected_windows.append(
-                                float(
-                                    np.sum(
-                                        historical_absolute[
-                                            window_start:
-                                            window_start
-                                            + window_size
-                                        ]
-                                    )
-                                )
-                            )
-
-                    if expected_windows:
-                        historical_window_median = float(
-                            np.median(expected_windows)
-                        )
-                        historical_window_mad = float(
-                            np.median(
-                                np.abs(
-                                    np.asarray(expected_windows)
-                                    - historical_window_median
-                                )
-                            )
-                        )
-                        historical_window_iqr = float(
-                            np.percentile(expected_windows, 75)
-                            - np.percentile(expected_windows, 25)
-                        )
-                        robust_window_scale = max(
-                            1.4826 * historical_window_mad,
-                            historical_window_iqr / 1.349,
-                            1e-6,
-                        )
-                        cumulative_abnormality = _clip01(
-                            (
-                                recent_directional_displacement
-                                - historical_window_median
-                            )
-                            / robust_window_scale
-                        )
-                    else:
-                        cumulative_abnormality = 0.0
-
-                    cumulative_abnormality_value = (
-                        cumulative_abnormality
-                    )
-
-                    run_strength = _clip01(
-                        (
-                            persistence_count - 2
-                        )
-                        / max(
-                            1,
-                            len(recent_deltas) - 2,
-                        )
-                    )
-
-                    persistence_score = _clip01(
-                        0.60 * directional_consistency
-                        + 0.40 * persistence
-                    )
-
-                    network_suppression = _clip01(
-                        (
-                            1.0
-                            - network["temperature_c"][
-                                "coherence"
-                            ]
-                        )
-                        / 0.30
-                    )
-
-                    progressive_drift = _clip01(
-                        (
-                            0.35 * persistence_score
-                            + 0.65 * cumulative_abnormality
-                        )
-                        * network_suppression
-                        * run_strength
-                    )
-
-
-    # --------------------------------------------------------
     # Regional event evidence.
     #
     # This deliberately uses change across the network rather
@@ -1331,25 +1147,11 @@ def _calculate_network_evidence(
         )
     )
 
-    progressive_sensor_evidence = 0.0
-
-    if (
-        progressive_drift >= 0.40
-        and isolation_evidence >= 0.40
-        and network_coherence < 0.70
-    ):
-        progressive_sensor_evidence = _clip01(
-            0.50 * progressive_drift
-            + 0.50 * isolation_evidence
-        )
-
     evidence_anomaly_score = _clip01(
         max(
             regional_evidence,
             sensor_fault_evidence,
             temporal_z_evidence * isolation_evidence,
-            progressive_drift,
-            progressive_sensor_evidence,
         )
     )
 
@@ -1385,21 +1187,6 @@ def _calculate_network_evidence(
         ),
         "frozen_sensor": frozen_evidence,
         "drift": drift_evidence,
-        "progressive_drift": _clip01(
-            progressive_drift
-        ),
-        "directional_consistency": _clip01(
-            directional_consistency_value
-        ),
-        "persistence": _clip01(
-            persistence_value
-        ),
-        "persistence_run_length": int(
-            persistence_run_length
-        ),
-        "cumulative_abnormality": _clip01(
-            cumulative_abnormality_value
-        ),
         "regional_event": regional_evidence,
         "network_coherence": network_coherence,
         "isolation": isolation_evidence,
@@ -1416,7 +1203,6 @@ def _calculate_network_evidence(
 def _run_real_models(
     features: dict,
     evidence: dict | None = None,
-    station_id=None,
 ) -> dict:
 
     row = (
@@ -1438,14 +1224,6 @@ def _run_real_models(
 
     evidence_score = 0.0
     evidence_anomaly = False
-    progressive_drift = 0.0
-
-    isolation = 0.0
-    regional = 0.0
-    data_quality = 0.0
-    frozen_sensor = 0.0
-    drift = 0.0
-    network_coherence = 0.0
 
     if evidence:
         evidence_score = float(
@@ -1455,139 +1233,23 @@ def _run_real_models(
             )
         )
 
-        isolation = float(
-            evidence.get(
-                "isolation",
-                0.0,
-            )
-        )
-
-        regional = float(
-            evidence.get(
-                "regional_event",
-                0.0,
-            )
-        )
-
-        data_quality = float(
-            evidence.get(
-                "data_quality",
-                0.0,
-            )
-        )
-
-        frozen_sensor = float(
-            evidence.get(
-                "frozen_sensor",
-                0.0,
-            )
-        )
-
-        drift = float(
-            evidence.get(
-                "drift",
-                0.0,
-            )
-        )
-
-        network_coherence = float(
-            evidence.get(
-                "network_coherence",
-                0.0,
-            )
-        )
-
-        progressive_drift = float(
-            evidence.get(
-                "progressive_drift",
-                0.0,
-            )
-        )
-
-        progressive_sensor_evidence = (
-            progressive_drift >= 0.60
-            and isolation >= 0.35
-            and network_coherence < 0.75
-        )
-
         evidence_anomaly = (
-            data_quality >= 1.0
-            or frozen_sensor >= 1.0
+            evidence.get("data_quality", 0.0) >= 1.0
+            or evidence.get("frozen_sensor", 0.0) >= 1.0
+            or evidence.get("regional_event", 0.0) >= 0.70
             or (
-                regional >= 0.70
-                and network_coherence >= 0.70
+                evidence.get("drift", 0.0) >= 0.70
+                and evidence.get("isolation", 0.0) >= 0.50
             )
-            or progressive_sensor_evidence
         )
-
-    # --------------------------------------------------------
-    # Evidence-corroborated anomaly decision.
-    #
-    # Random Forest remains the primary detector, but an
-    # operational alert requires independent corroboration
-    # for live telemetry. This prevents isolated RF false
-    # positives from becoming sensor faults.
-    # --------------------------------------------------------
-
-    strong_isolation = (
-        isolation >= 0.75
-    )
-
-    strong_temporal_drift = (
-        drift >= 0.80
-        and isolation >= 0.25
-        and network_coherence < 0.70
-    )
-
-    progressive_sensor_evidence = (
-        progressive_drift >= 0.60
-        and isolation >= 0.35
-        and network_coherence < 0.75
-    )
-
-    corroborated_rf_anomaly = (
-        rf_anomaly
-        and (
-            evidence_anomaly
-            or strong_isolation
-            or strong_temporal_drift
-        )
-    )
 
     is_anomaly = bool(
-        corroborated_rf_anomaly
-        or evidence_anomaly
-    )
-
-    print(
-        "PROGRESSIVE_DECISION",
-        {
-            "station_id": station_id,
-            "progressive_drift": progressive_drift,
-            "isolation": isolation,
-            "sensor_fault": (
-                evidence.get("sensor_fault", 0.0)
-                if evidence
-                else 0.0
-            ),
-            "network_temperature_coherence": network_coherence,
-            "sensor_drift_evidence": progressive_sensor_evidence,
-            "rf_anomaly": rf_anomaly,
-            "rf_anomaly_probability": float(anomaly_proba),
-            "evidence_anomaly": evidence_anomaly,
-            "strong_isolation": strong_isolation,
-            "strong_temporal_drift": strong_temporal_drift,
-            "final_is_anomaly": is_anomaly,
-        },
+        rf_anomaly or evidence_anomaly
     )
 
     anomaly_score = max(
-        float(anomaly_proba)
-        if is_anomaly
-        else 0.0,
-        evidence_score
-        if evidence_anomaly
-        else 0.0,
+        float(anomaly_proba),
+        evidence_score if evidence_anomaly else 0.0,
     )
 
     # --------------------------------------------------------
@@ -1656,25 +1318,22 @@ def _run_real_models(
                 )
 
             elif (
-                (
-                    sensor_fault >= 0.70
-                    and (
-                        isolation >= 0.50
-                        or evidence.get(
-                            "data_quality",
-                            0.0,
-                        ) >= 1.0
-                        or evidence.get(
-                            "frozen_sensor",
-                            0.0,
-                        ) >= 1.0
-                        or evidence.get(
-                            "drift",
-                            0.0,
-                        ) >= 0.70
-                    )
+                sensor_fault >= 0.70
+                and (
+                    isolation >= 0.50
+                    or evidence.get(
+                        "data_quality",
+                        0.0,
+                    ) >= 1.0
+                    or evidence.get(
+                        "frozen_sensor",
+                        0.0,
+                    ) >= 1.0
+                    or evidence.get(
+                        "drift",
+                        0.0,
+                    ) >= 0.70
                 )
-                or progressive_sensor_evidence
             ):
                 weather_or_sensor = "sensor"
 
@@ -1895,30 +1554,11 @@ def _process_live_reading(
         current_context=all_station_history,
         previous_context=previous_context,
         features=features,
-        station_history=pd.concat(
-            [
-                history,
-                pd.DataFrame([{
-                    "station_id":
-                        reading.station_id,
-                    "timestamp":
-                        current_timestamp,
-                    "temperature_c":
-                        reading.temperature_c,
-                    "relative_humidity_pct":
-                        reading.relative_humidity_pct,
-                    "pressure_hpa":
-                        reading.pressure_hpa,
-                }]),
-            ],
-            ignore_index=True,
-        ),
     )
 
     model_result = _run_real_models(
         features,
         evidence=evidence,
-        station_id=reading.station_id,
     )
 
     return {

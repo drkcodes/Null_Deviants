@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 import pandas as pd
-import numpy as np
 import joblib
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
@@ -649,764 +648,32 @@ def _build_model_features(
 # EXPLAINABILITY EVIDENCE
 # ============================================================
 
+def _evidence_from_feature(
+    value,
+) -> float:
+    """
+    Convert an explainability feature into a normalized
+    evidence score.
 
-def _clip01(value):
-    return max(0.0, min(1.0, float(value)))
+    -999 means the feature is unavailable and therefore
+    contributes no evidence.
+    """
 
+    if value is None:
+        return 0.0
 
-def _safe_float(value, default=None):
     try:
-        if value is None or pd.isna(value):
-            return default
         value = float(value)
-        if not pd.notna(value):
-            return default
-        return value
     except (TypeError, ValueError):
-        return default
-
-
-def _context_dataframe(rows):
-    """
-    Convert database context rows into a dataframe with stable
-    column names. Supports both tuple rows and dict-like rows.
-    """
-    columns = [
-        "station_id",
-        "timestamp",
-        "temperature_c",
-        "relative_humidity_pct",
-        "pressure_hpa",
-    ]
-
-    if rows is None:
-        return pd.DataFrame(columns=columns)
-
-    if isinstance(rows, pd.DataFrame):
-        frame = rows.copy()
-        if len(frame.columns) == len(columns):
-            frame.columns = columns
-        return frame
-
-    if not rows:
-        return pd.DataFrame(columns=columns)
-
-    first = rows[0]
-
-    if isinstance(first, dict):
-        frame = pd.DataFrame(rows)
-        for column in columns:
-            if column not in frame.columns:
-                frame[column] = None
-        return frame[columns]
-
-    return pd.DataFrame(rows, columns=columns)
-
-
-def _feature_evidence(value, scale=5.0):
-    """
-    Normalize a continuous feature into [0, 1].
-
-    -999 and missing values mean unavailable evidence.
-    """
-    value = _safe_float(value)
-
-    if value is None or value == -999:
         return 0.0
 
-    if scale <= 0:
+    if value == -999:
         return 0.0
 
-    return _clip01(abs(value) / scale)
-
-
-def _previous_network_context(timestamp):
-    """
-    Retrieve the exact preceding 15-minute network snapshot.
-
-    Exact-time matching is deliberate: a spatial comparison must
-    never substitute an earlier or later observation.
-    """
-    previous_timestamp = timestamp - pd.Timedelta(minutes=15)
-
-    rows = get_latest_station_context(
-        timestamp=previous_timestamp,
-        max_age_seconds=1800,
+    return min(
+        abs(value) / 5,
+        1.0,
     )
-
-    return _context_dataframe(rows)
-
-
-def _calculate_network_evidence(
-    station_id,
-    timestamp,
-    current_context,
-    previous_context,
-    features,
-    station_history=None,
-):
-    """
-    Calculate explicit spatiotemporal evidence.
-
-    Core SIH distinction:
-        coherent network movement -> weather
-        isolated station movement -> sensor
-
-    Only Temperature, Relative Humidity and Pressure are used.
-    """
-
-    value_columns = [
-        "temperature_c",
-        "relative_humidity_pct",
-        "pressure_hpa",
-    ]
-
-    current = _context_dataframe(
-        current_context.to_dict("records")
-        if isinstance(current_context, pd.DataFrame)
-        else current_context
-    )
-
-    previous = _context_dataframe(
-        previous_context.to_dict("records")
-        if isinstance(previous_context, pd.DataFrame)
-        else previous_context
-    )
-
-    current = current.copy()
-    previous = previous.copy()
-
-    if current.empty:
-        current = pd.DataFrame(columns=[
-            "station_id",
-            "timestamp",
-            "temperature_c",
-            "relative_humidity_pct",
-            "pressure_hpa",
-        ])
-
-    if previous.empty:
-        previous = pd.DataFrame(columns=[
-            "station_id",
-            "timestamp",
-            "temperature_c",
-            "relative_humidity_pct",
-            "pressure_hpa",
-        ])
-
-    current["station_id"] = current["station_id"].astype(str)
-    previous["station_id"] = previous["station_id"].astype(str)
-
-    current = current.drop_duplicates(
-        subset=["station_id"],
-        keep="last",
-    )
-    previous = previous.drop_duplicates(
-        subset=["station_id"],
-        keep="last",
-    )
-
-    merged = current.merge(
-        previous,
-        on="station_id",
-        how="inner",
-        suffixes=("_current", "_previous"),
-    )
-
-    target_station = str(station_id)
-
-    target = merged[
-        merged["station_id"] == target_station
-    ]
-
-    network = {}
-
-    for column in value_columns:
-        current_col = f"{column}_current"
-        previous_col = f"{column}_previous"
-
-        if (
-            current_col not in merged.columns
-            or previous_col not in merged.columns
-        ):
-            network[column] = {
-                "median_delta": 0.0,
-                "median_abs_delta": 0.0,
-                "coherence": 0.0,
-                "target_delta": None,
-            }
-            continue
-
-        current_values = pd.to_numeric(
-            merged[current_col],
-            errors="coerce",
-        )
-
-        previous_values = pd.to_numeric(
-            merged[previous_col],
-            errors="coerce",
-        )
-
-        deltas = (
-            current_values - previous_values
-        ).dropna()
-
-        if deltas.empty:
-            network[column] = {
-                "median_delta": 0.0,
-                "median_abs_delta": 0.0,
-                "coherence": 0.0,
-                "target_delta": None,
-            }
-            continue
-
-        median_delta = float(deltas.median())
-        median_abs_delta = float(deltas.abs().median())
-
-        target_delta = None
-
-        if not target.empty:
-            current_value = _safe_float(
-                target.iloc[0][current_col]
-            )
-            previous_value = _safe_float(
-                target.iloc[0][previous_col]
-            )
-
-            if (
-                current_value is not None
-                and previous_value is not None
-            ):
-                target_delta = (
-                    current_value - previous_value
-                )
-
-        if abs(median_delta) > 0:
-            direction = 1 if median_delta > 0 else -1
-
-            meaningful = deltas[
-                deltas.abs()
-                >= max(abs(median_delta) * 0.25, 1e-9)
-            ]
-
-            if len(meaningful) > 0:
-                same_direction = (
-                    meaningful > 0
-                    if direction > 0
-                    else meaningful < 0
-                )
-
-                coherence = float(
-                    same_direction.mean()
-                )
-            else:
-                coherence = 0.0
-        else:
-            coherence = 0.0
-
-        network[column] = {
-            "median_delta": median_delta,
-            "median_abs_delta": median_abs_delta,
-            "coherence": _clip01(coherence),
-            "target_delta": target_delta,
-        }
-
-    # --------------------------------------------------------
-    # Explicit data-quality evidence.
-    # --------------------------------------------------------
-
-    missing_evidence = 1.0 if any(
-        _safe_float(
-            features.get(name),
-            0,
-        ) == 1
-        for name in [
-            "is_missing_temperature",
-            "is_missing_humidity",
-            "is_missing_pressure",
-        ]
-    ) else 0.0
-
-    max_stuck = max(
-        _safe_float(
-            features.get(
-                "temperature_stuck_count"
-            ),
-            0,
-        ),
-        _safe_float(
-            features.get(
-                "humidity_stuck_count"
-            ),
-            0,
-        ),
-        _safe_float(
-            features.get(
-                "pressure_stuck_count"
-            ),
-            0,
-        ),
-    )
-
-    frozen_evidence = _clip01(
-        max_stuck / 4.0
-    )
-
-    physically_implausible = _safe_float(
-        features.get(
-            "physically_implausible_flag"
-        ),
-        0,
-    )
-
-    physical_evidence = (
-        1.0
-        if physically_implausible == 1
-        else 0.0
-    )
-
-    # --------------------------------------------------------
-    # Local temporal evidence.
-    # --------------------------------------------------------
-
-    temp_z = abs(_safe_float(
-        features.get("temperature_zscore_6h"),
-        0,
-    ))
-
-    humidity_z = abs(_safe_float(
-        features.get("humidity_zscore_6h"),
-        0,
-    ))
-
-    pressure_z = abs(_safe_float(
-        features.get("pressure_zscore_6h"),
-        0,
-    ))
-
-    temporal_z_evidence = _clip01(
-        max(
-            temp_z / 3.0,
-            humidity_z / 3.0,
-            pressure_z / 3.0,
-        )
-    )
-
-    temp_roc_1h = abs(_safe_float(
-        features.get("temperature_roc_1h"),
-        0,
-    ))
-
-    humidity_roc_1h = abs(_safe_float(
-        features.get("humidity_roc_1h"),
-        0,
-    ))
-
-    pressure_roc_1h = abs(_safe_float(
-        features.get("pressure_roc_1h"),
-        0,
-    ))
-
-    drift_evidence = _clip01(
-        max(
-            temp_roc_1h / 3.0,
-            humidity_roc_1h / 15.0,
-            pressure_roc_1h / 5.0,
-        )
-    )
-
-    # --------------------------------------------------------
-    # Progressive sensor drift evidence.
-    # --------------------------------------------------------
-
-    progressive_drift = 0.0
-    directional_consistency_value = 0.0
-    persistence_value = 0.0
-    persistence_run_length = 0
-    cumulative_abnormality_value = 0.0
-
-    if (
-        station_history is not None
-        and not station_history.empty
-        and "timestamp" in station_history.columns
-        and "temperature_c" in station_history.columns
-    ):
-        drift_history = station_history.copy()
-        drift_history["timestamp"] = pd.to_datetime(
-            drift_history["timestamp"],
-            errors="coerce",
-        )
-        drift_history["temperature_c"] = pd.to_numeric(
-            drift_history["temperature_c"],
-            errors="coerce",
-        )
-        drift_history = drift_history.dropna(
-            subset=["timestamp", "temperature_c"]
-        ).sort_values("timestamp")
-
-        if len(drift_history) >= 10:
-            temperatures = drift_history[
-                "temperature_c"
-            ].to_numpy(dtype=float)
-            deltas = np.diff(temperatures)
-
-            recent_delta_count = min(5, len(deltas) - 8)
-            historical_deltas = deltas[:-recent_delta_count]
-            recent_deltas = deltas[-recent_delta_count:]
-
-            if (
-                len(historical_deltas) >= 8
-                and len(recent_deltas) >= 3
-            ):
-                if len(recent_deltas) >= 3:
-                    dominant_direction = np.sign(
-                        np.sum(recent_deltas)
-                    )
-
-                    if dominant_direction == 0:
-                        dominant_direction = 1.0
-                    directional = (
-                        recent_deltas
-                        * dominant_direction
-                    )
-                    supporting = directional > 0
-                    directional_count = int(
-                        supporting.sum()
-                    )
-
-                    directional_consistency = (
-                        directional_count
-                        / len(recent_deltas)
-                    )
-                    directional_consistency_value = (
-                        directional_consistency
-                    )
-
-                    persistence_count = 0
-                    for supports_direction in supporting[::-1]:
-                        if not supports_direction:
-                            break
-                        persistence_count += 1
-
-                    persistence = _clip01(
-                        persistence_count
-                        / len(recent_deltas)
-                    )
-                    persistence_value = persistence
-                    persistence_run_length = persistence_count
-
-                    recent_directional_displacement = float(
-                        np.sum(
-                            np.abs(
-                                recent_deltas[supporting]
-                            )
-                        )
-                    )
-
-                    historical_absolute = np.abs(
-                        historical_deltas
-                    )
-                    expected_windows = []
-                    window_size = len(recent_deltas)
-
-                    if len(historical_absolute) >= window_size:
-                        for window_start in range(
-                            len(historical_absolute)
-                            - window_size
-                            + 1
-                        ):
-                            expected_windows.append(
-                                float(
-                                    np.sum(
-                                        historical_absolute[
-                                            window_start:
-                                            window_start
-                                            + window_size
-                                        ]
-                                    )
-                                )
-                            )
-
-                    if expected_windows:
-                        historical_window_median = float(
-                            np.median(expected_windows)
-                        )
-                        historical_window_mad = float(
-                            np.median(
-                                np.abs(
-                                    np.asarray(expected_windows)
-                                    - historical_window_median
-                                )
-                            )
-                        )
-                        historical_window_iqr = float(
-                            np.percentile(expected_windows, 75)
-                            - np.percentile(expected_windows, 25)
-                        )
-                        robust_window_scale = max(
-                            1.4826 * historical_window_mad,
-                            historical_window_iqr / 1.349,
-                            1e-6,
-                        )
-                        cumulative_abnormality = _clip01(
-                            (
-                                recent_directional_displacement
-                                - historical_window_median
-                            )
-                            / robust_window_scale
-                        )
-                    else:
-                        cumulative_abnormality = 0.0
-
-                    cumulative_abnormality_value = (
-                        cumulative_abnormality
-                    )
-
-                    run_strength = _clip01(
-                        (
-                            persistence_count - 2
-                        )
-                        / max(
-                            1,
-                            len(recent_deltas) - 2,
-                        )
-                    )
-
-                    persistence_score = _clip01(
-                        0.60 * directional_consistency
-                        + 0.40 * persistence
-                    )
-
-                    network_suppression = _clip01(
-                        (
-                            1.0
-                            - network["temperature_c"][
-                                "coherence"
-                            ]
-                        )
-                        / 0.30
-                    )
-
-                    progressive_drift = _clip01(
-                        (
-                            0.35 * persistence_score
-                            + 0.65 * cumulative_abnormality
-                        )
-                        * network_suppression
-                        * run_strength
-                    )
-
-
-    # --------------------------------------------------------
-    # Regional event evidence.
-    #
-    # This deliberately uses change across the network rather
-    # than absolute station-to-station difference. A regional
-    # event can move all stations together while preserving
-    # small spatial differences.
-    # --------------------------------------------------------
-
-    temp_net = network["temperature_c"]
-    humidity_net = network["relative_humidity_pct"]
-    pressure_net = network["pressure_hpa"]
-
-    temp_event = (
-        abs(temp_net["median_delta"]) >= 3.0
-        and temp_net["coherence"] >= 0.70
-    )
-
-    humidity_event = (
-        abs(humidity_net["median_delta"]) >= 8.0
-        and humidity_net["coherence"] >= 0.70
-    )
-
-    pressure_event = (
-        abs(pressure_net["median_delta"]) >= 3.0
-        and pressure_net["coherence"] >= 0.70
-    )
-
-    regional_event = (
-        (
-            int(temp_event)
-            + int(humidity_event)
-            + int(pressure_event)
-        ) >= 1
-        and (
-            temp_net["coherence"]
-            + humidity_net["coherence"]
-            + pressure_net["coherence"]
-        ) / 3.0 >= 0.70
-    )
-
-    network_coherence = _clip01(
-        (
-            temp_net["coherence"]
-            + humidity_net["coherence"]
-            + pressure_net["coherence"]
-        ) / 3.0
-    )
-
-    regional_strengths = []
-
-    if temp_event:
-        regional_strengths.append(
-            min(
-                abs(temp_net["median_delta"]) / 6.0,
-                1.0,
-            )
-        )
-
-    if humidity_event:
-        regional_strengths.append(
-            min(
-                abs(humidity_net["median_delta"]) / 15.0,
-                1.0,
-            )
-        )
-
-    if pressure_event:
-        regional_strengths.append(
-            min(
-                abs(pressure_net["median_delta"]) / 8.0,
-                1.0,
-            )
-        )
-
-    regional_evidence = (
-        _clip01(
-            max(regional_strengths)
-            if regional_strengths
-            else 0.0
-        )
-        * network_coherence
-    )
-
-    # --------------------------------------------------------
-    # Isolated station evidence.
-    # --------------------------------------------------------
-
-    isolation_scores = []
-
-    for variable in value_columns:
-        item = network[variable]
-        target_delta = item["target_delta"]
-
-        if target_delta is None:
-            continue
-
-        network_abs = max(
-            item["median_abs_delta"],
-            0.25,
-        )
-
-        ratio = abs(target_delta) / network_abs
-
-        isolation_scores.append(
-            _clip01(
-                (ratio - 1.0) / 4.0
-            )
-        )
-
-    isolation_evidence = (
-        max(isolation_scores)
-        if isolation_scores
-        else 0.0
-    )
-
-    local_sensor_evidence = _clip01(
-        max(
-            isolation_evidence,
-            drift_evidence * (
-                1.0 - network_coherence
-            ),
-        )
-    )
-
-    sensor_fault_evidence = _clip01(
-        max(
-            missing_evidence,
-            physical_evidence,
-            frozen_evidence,
-            local_sensor_evidence,
-        )
-    )
-
-    progressive_sensor_evidence = 0.0
-
-    if (
-        progressive_drift >= 0.40
-        and isolation_evidence >= 0.40
-        and network_coherence < 0.70
-    ):
-        progressive_sensor_evidence = _clip01(
-            0.50 * progressive_drift
-            + 0.50 * isolation_evidence
-        )
-
-    evidence_anomaly_score = _clip01(
-        max(
-            regional_evidence,
-            sensor_fault_evidence,
-            temporal_z_evidence * isolation_evidence,
-            progressive_drift,
-            progressive_sensor_evidence,
-        )
-    )
-
-    return {
-        "temporal": _clip01(
-            max(
-                temporal_z_evidence,
-                drift_evidence,
-            )
-        ),
-        "spatial": _clip01(
-            max(
-                regional_evidence,
-                isolation_evidence,
-            )
-        ),
-        "multivariate": _clip01(
-            max(
-                physical_evidence,
-                _feature_evidence(
-                    features.get(
-                        "dew_point_deficit_c"
-                    ),
-                    scale=5.0,
-                ),
-            )
-        ),
-        "data_quality": _clip01(
-            max(
-                missing_evidence,
-                physical_evidence,
-            )
-        ),
-        "frozen_sensor": frozen_evidence,
-        "drift": drift_evidence,
-        "progressive_drift": _clip01(
-            progressive_drift
-        ),
-        "directional_consistency": _clip01(
-            directional_consistency_value
-        ),
-        "persistence": _clip01(
-            persistence_value
-        ),
-        "persistence_run_length": int(
-            persistence_run_length
-        ),
-        "cumulative_abnormality": _clip01(
-            cumulative_abnormality_value
-        ),
-        "regional_event": regional_evidence,
-        "network_coherence": network_coherence,
-        "isolation": isolation_evidence,
-        "sensor_fault": sensor_fault_evidence,
-        "evidence_anomaly_score": evidence_anomaly_score,
-        "network_station_count": int(len(current)),
-    }
 
 
 # ============================================================
@@ -1415,8 +682,6 @@ def _calculate_network_evidence(
 
 def _run_real_models(
     features: dict,
-    evidence: dict | None = None,
-    station_id=None,
 ) -> dict:
 
     row = (
@@ -1426,292 +691,80 @@ def _run_real_models(
     )
 
     # --------------------------------------------------------
-    # STAGE 1 — existing Random Forest remains primary.
+    # STAGE 1
+    # Anomaly Detection
     # --------------------------------------------------------
 
-    anomaly_pred = model_anomaly.predict(row)[0]
-    anomaly_proba = model_anomaly.predict_proba(row)[0][1]
-
-    rf_anomaly = bool(
-        int(anomaly_pred) == 1
+    anomaly_pred = (
+        model_anomaly
+        .predict(row)[0]
     )
 
-    evidence_score = 0.0
-    evidence_anomaly = False
-    progressive_drift = 0.0
-
-    isolation = 0.0
-    regional = 0.0
-    data_quality = 0.0
-    frozen_sensor = 0.0
-    drift = 0.0
-    network_coherence = 0.0
-
-    if evidence:
-        evidence_score = float(
-            evidence.get(
-                "evidence_anomaly_score",
-                0.0,
-            )
-        )
-
-        isolation = float(
-            evidence.get(
-                "isolation",
-                0.0,
-            )
-        )
-
-        regional = float(
-            evidence.get(
-                "regional_event",
-                0.0,
-            )
-        )
-
-        data_quality = float(
-            evidence.get(
-                "data_quality",
-                0.0,
-            )
-        )
-
-        frozen_sensor = float(
-            evidence.get(
-                "frozen_sensor",
-                0.0,
-            )
-        )
-
-        drift = float(
-            evidence.get(
-                "drift",
-                0.0,
-            )
-        )
-
-        network_coherence = float(
-            evidence.get(
-                "network_coherence",
-                0.0,
-            )
-        )
-
-        progressive_drift = float(
-            evidence.get(
-                "progressive_drift",
-                0.0,
-            )
-        )
-
-        progressive_sensor_evidence = (
-            progressive_drift >= 0.60
-            and isolation >= 0.35
-            and network_coherence < 0.75
-        )
-
-        evidence_anomaly = (
-            data_quality >= 1.0
-            or frozen_sensor >= 1.0
-            or (
-                regional >= 0.70
-                and network_coherence >= 0.70
-            )
-            or progressive_sensor_evidence
-        )
-
-    # --------------------------------------------------------
-    # Evidence-corroborated anomaly decision.
-    #
-    # Random Forest remains the primary detector, but an
-    # operational alert requires independent corroboration
-    # for live telemetry. This prevents isolated RF false
-    # positives from becoming sensor faults.
-    # --------------------------------------------------------
-
-    strong_isolation = (
-        isolation >= 0.75
-    )
-
-    strong_temporal_drift = (
-        drift >= 0.80
-        and isolation >= 0.25
-        and network_coherence < 0.70
-    )
-
-    progressive_sensor_evidence = (
-        progressive_drift >= 0.60
-        and isolation >= 0.35
-        and network_coherence < 0.75
-    )
-
-    corroborated_rf_anomaly = (
-        rf_anomaly
-        and (
-            evidence_anomaly
-            or strong_isolation
-            or strong_temporal_drift
-        )
+    anomaly_proba = (
+        model_anomaly
+        .predict_proba(row)[0][1]
     )
 
     is_anomaly = bool(
-        corroborated_rf_anomaly
-        or evidence_anomaly
-    )
-
-    print(
-        "PROGRESSIVE_DECISION",
-        {
-            "station_id": station_id,
-            "progressive_drift": progressive_drift,
-            "isolation": isolation,
-            "sensor_fault": (
-                evidence.get("sensor_fault", 0.0)
-                if evidence
-                else 0.0
-            ),
-            "network_temperature_coherence": network_coherence,
-            "sensor_drift_evidence": progressive_sensor_evidence,
-            "rf_anomaly": rf_anomaly,
-            "rf_anomaly_probability": float(anomaly_proba),
-            "evidence_anomaly": evidence_anomaly,
-            "strong_isolation": strong_isolation,
-            "strong_temporal_drift": strong_temporal_drift,
-            "final_is_anomaly": is_anomaly,
-        },
-    )
-
-    anomaly_score = max(
-        float(anomaly_proba)
-        if is_anomaly
-        else 0.0,
-        evidence_score
-        if evidence_anomaly
-        else 0.0,
+        int(anomaly_pred) == 1
     )
 
     # --------------------------------------------------------
-    # STAGE 2 — existing RF, followed by explicit evidence
-    # fusion when the network pattern is decisive.
+    # STAGE 2
+    # Weather vs Sensor
     # --------------------------------------------------------
 
     weather_or_sensor = "none"
+
     cause_confidence = None
-    rf_cause_confidence = 0.0
 
     if is_anomaly:
 
-        cause_pred = model_cause.predict(row)[0]
-        cause_proba = model_cause.predict_proba(row)[0]
-
-        weather_or_sensor = str(cause_pred)
-
-        rf_cause_confidence = float(
-            max(cause_proba)
+        cause_pred = (
+            model_cause
+            .predict(row)[0]
         )
 
-        cause_confidence = rf_cause_confidence
+        cause_proba = (
+            model_cause
+            .predict_proba(row)[0]
+        )
 
-        if evidence:
+        weather_or_sensor = str(
+            cause_pred
+        )
 
-            regional = float(
-                evidence.get(
-                    "regional_event",
-                    0.0,
-                )
-            )
-
-            isolation = float(
-                evidence.get(
-                    "isolation",
-                    0.0,
-                )
-            )
-
-            sensor_fault = float(
-                evidence.get(
-                    "sensor_fault",
-                    0.0,
-                )
-            )
-
-            network_coherence = float(
-                evidence.get(
-                    "network_coherence",
-                    0.0,
-                )
-            )
-
-            if (
-                regional >= 0.70
-                and network_coherence >= 0.70
-            ):
-                weather_or_sensor = "weather"
-
-                cause_confidence = _clip01(
-                    max(
-                        rf_cause_confidence,
-                        0.70 + 0.30 * regional,
-                    )
-                )
-
-            elif (
-                (
-                    sensor_fault >= 0.70
-                    and (
-                        isolation >= 0.50
-                        or evidence.get(
-                            "data_quality",
-                            0.0,
-                        ) >= 1.0
-                        or evidence.get(
-                            "frozen_sensor",
-                            0.0,
-                        ) >= 1.0
-                        or evidence.get(
-                            "drift",
-                            0.0,
-                        ) >= 0.70
-                    )
-                )
-                or progressive_sensor_evidence
-            ):
-                weather_or_sensor = "sensor"
-
-                cause_confidence = _clip01(
-                    max(
-                        rf_cause_confidence,
-                        0.70 + 0.30 * sensor_fault,
-                    )
-                )
+        cause_confidence = float(
+            max(cause_proba)
+        )
 
     # --------------------------------------------------------
     # Root-cause component.
     # --------------------------------------------------------
 
     z_scores = {
+
         "temperature": abs(
-            _safe_float(
+            _numeric(
                 features.get(
                     "temperature_zscore_6h"
-                ),
-                0,
+                )
             )
         ),
+
         "humidity": abs(
-            _safe_float(
+            _numeric(
                 features.get(
                     "humidity_zscore_6h"
-                ),
-                0,
+                )
             )
         ),
+
         "pressure": abs(
-            _safe_float(
+            _numeric(
                 features.get(
                     "pressure_zscore_6h"
-                ),
-                0,
+                )
             )
         ),
     }
@@ -1720,29 +773,49 @@ def _run_real_models(
 
     if (
         is_anomaly
-        and weather_or_sensor.lower() == "sensor"
+        and weather_or_sensor.lower()
+        == "sensor"
     ):
+
         fault_component = max(
             z_scores,
             key=z_scores.get,
         )
 
-        if evidence:
-            if evidence.get("data_quality", 0.0) >= 1.0:
-                fault_component = "data_quality"
-            elif evidence.get("frozen_sensor", 0.0) >= 1.0:
-                fault_component = "sensor"
-            elif evidence.get("drift", 0.0) >= 0.70:
-                fault_component = "temperature"
+    # --------------------------------------------------------
+    # Explainability evidence.
+    # --------------------------------------------------------
+
+    temporal_evidence = _evidence_from_feature(
+        features.get(
+            "temperature_zscore_6h"
+        )
+    )
+
+    spatial_evidence = _evidence_from_feature(
+        features.get(
+            "regional_temp_zscore"
+        )
+    )
+
+    multivariate_evidence = _evidence_from_feature(
+        features.get(
+            "physically_implausible_flag"
+        )
+    )
 
     return {
+
         "anomaly": is_anomaly,
+
         "anomaly_score": round(
-            float(anomaly_score),
+            float(anomaly_proba),
             3,
         ),
+
         "weather_or_sensor":
             weather_or_sensor,
+
         "confidence": (
             round(
                 cause_confidence,
@@ -1751,10 +824,30 @@ def _run_real_models(
             if cause_confidence is not None
             else None
         ),
+
         "fault_component":
             fault_component,
-        "evidence":
-            evidence or {},
+
+        "evidence": {
+
+            "temporal":
+                round(
+                    temporal_evidence,
+                    3,
+                ),
+
+            "spatial":
+                round(
+                    spatial_evidence,
+                    3,
+                ),
+
+            "multivariate":
+                round(
+                    multivariate_evidence,
+                    3,
+                ),
+        },
     }
 
 
@@ -1791,16 +884,19 @@ def _process_live_reading(
 ):
     """
     Build the canonical 50-feature vector and run the real
-    two-stage ML pipeline.
+    two-stage ML pipeline for one raw telemetry observation.
 
-    Random Forest remains the primary ML detector. The evidence
-    layer supplements it with explicit temporal, spatial,
-    network-coherence, frozen, missing and physical evidence.
+    If spatial_context is supplied, it must represent the
+    complete contemporaneous network snapshot for this reading.
     """
 
     current_timestamp = _normalize_ingest_timestamp(
         reading.timestamp
     )
+
+    # --------------------------------------------------------
+    # Retrieve previous station history.
+    # --------------------------------------------------------
 
     history_rows = get_station_feature_history(
         station_id=reading.station_id,
@@ -1821,24 +917,31 @@ def _process_live_reading(
             ]
         )
 
+    # --------------------------------------------------------
+    # Spatial context.
+    #
+    # For batch ingestion, the caller supplies the complete
+    # timestamp snapshot. For single ingestion, use the exact
+    # timestamp context currently present in PostgreSQL.
+    # --------------------------------------------------------
+
     if spatial_context is None:
+
         spatial_rows = get_latest_station_context(
             timestamp=current_timestamp,
             max_age_seconds=1800,
         )
 
-        all_station_history = _context_dataframe(
+        all_station_history = pd.DataFrame(
             spatial_rows
         )
 
     else:
-        all_station_history = _context_dataframe(
-            spatial_context.to_dict("records")
-            if isinstance(spatial_context, pd.DataFrame)
-            else spatial_context
-        )
+
+        all_station_history = spatial_context.copy()
 
     if all_station_history.empty:
+
         all_station_history = pd.DataFrame(
             columns=[
                 "station_id",
@@ -1849,22 +952,30 @@ def _process_live_reading(
             ]
         )
 
-    # Ensure the current station occurs exactly once.
-    all_station_history = all_station_history[
-        all_station_history["station_id"].astype(str)
-        != str(reading.station_id)
-    ]
+    # --------------------------------------------------------
+    # Ensure the current observation is present exactly once.
+    # --------------------------------------------------------
 
-    current_spatial_row = pd.DataFrame([
-        {
-            "station_id": reading.station_id,
-            "timestamp": current_timestamp,
-            "temperature_c": reading.temperature_c,
-            "relative_humidity_pct":
-                reading.relative_humidity_pct,
-            "pressure_hpa": reading.pressure_hpa,
-        }
-    ])
+    current_spatial_row = pd.DataFrame(
+        [
+            {
+                "station_id":
+                    reading.station_id,
+
+                "timestamp":
+                    current_timestamp,
+
+                "temperature_c":
+                    reading.temperature_c,
+
+                "relative_humidity_pct":
+                    reading.relative_humidity_pct,
+
+                "pressure_hpa":
+                    reading.pressure_hpa,
+            }
+        ]
+    )
 
     all_station_history = pd.concat(
         [
@@ -1874,74 +985,203 @@ def _process_live_reading(
         ignore_index=True,
     )
 
+    # --------------------------------------------------------
+    # Build exact 50-feature vector.
+    # --------------------------------------------------------
+
     features = build_features(
         station_id=reading.station_id,
         timestamp=current_timestamp,
         temperature_c=reading.temperature_c,
-        relative_humidity_pct=reading.relative_humidity_pct,
+        relative_humidity_pct=(
+            reading.relative_humidity_pct
+        ),
         pressure_hpa=reading.pressure_hpa,
         history=history,
         all_station_history=all_station_history,
     )
 
-    # Retrieve the exact preceding network snapshot.
-    previous_context = _previous_network_context(
-        current_timestamp
+    model_row = build_model_row(features)
+
+    # --------------------------------------------------------
+    # Stage 1 — anomaly detection.
+    # --------------------------------------------------------
+
+    anomaly_pred = model_anomaly.predict(
+        model_row
+    )[0]
+
+    anomaly_proba = model_anomaly.predict_proba(
+        model_row
+    )[0][1]
+
+    is_anomaly = bool(
+        int(anomaly_pred) == 1
     )
 
-    evidence = _calculate_network_evidence(
-        station_id=reading.station_id,
-        timestamp=current_timestamp,
-        current_context=all_station_history,
-        previous_context=previous_context,
-        features=features,
-        station_history=pd.concat(
-            [
-                history,
-                pd.DataFrame([{
-                    "station_id":
-                        reading.station_id,
-                    "timestamp":
-                        current_timestamp,
-                    "temperature_c":
-                        reading.temperature_c,
-                    "relative_humidity_pct":
-                        reading.relative_humidity_pct,
-                    "pressure_hpa":
-                        reading.pressure_hpa,
-                }]),
-            ],
-            ignore_index=True,
+    # --------------------------------------------------------
+    # Stage 2 — weather vs sensor.
+    # --------------------------------------------------------
+
+    weather_or_sensor = "none"
+    cause_confidence = None
+
+    if is_anomaly:
+
+        cause_pred = model_cause.predict(
+            model_row
+        )[0]
+
+        cause_proba = model_cause.predict_proba(
+            model_row
+        )[0]
+
+        weather_or_sensor = str(
+            cause_pred
+        )
+
+        cause_confidence = float(
+            max(cause_proba)
+        )
+
+    # --------------------------------------------------------
+    # Root-cause component.
+    # --------------------------------------------------------
+
+    z_scores = {
+        "temperature": abs(
+            float(
+                features.get(
+                    "temperature_zscore_6h",
+                    0,
+                )
+                or 0
+            )
         ),
+
+        "humidity": abs(
+            float(
+                features.get(
+                    "humidity_zscore_6h",
+                    0,
+                )
+                or 0
+            )
+        ),
+
+        "pressure": abs(
+            float(
+                features.get(
+                    "pressure_zscore_6h",
+                    0,
+                )
+                or 0
+            )
+        ),
+    }
+
+    fault_component = "none"
+
+    if (
+        is_anomaly
+        and weather_or_sensor.lower()
+        == "sensor"
+    ):
+
+        fault_component = max(
+            z_scores,
+            key=z_scores.get,
+        )
+
+    # --------------------------------------------------------
+    # Explainability evidence.
+    # --------------------------------------------------------
+
+    temporal_evidence = _evidence_from_feature(
+        features.get(
+            "temperature_zscore_6h"
+        )
     )
 
-    model_result = _run_real_models(
-        features,
-        evidence=evidence,
-        station_id=reading.station_id,
+    spatial_evidence = _evidence_from_feature(
+        features.get(
+            "regional_temp_zscore"
+        )
     )
 
-    return {
-        "station_id": reading.station_id,
-        "timestamp": current_timestamp.isoformat(),
-        "temperature_c": reading.temperature_c,
+    multivariate_evidence = _evidence_from_feature(
+        features.get(
+            "physically_implausible_flag"
+        )
+    )
+
+    result = {
+
+        "station_id":
+            reading.station_id,
+
+        "timestamp":
+            current_timestamp.isoformat(),
+
+        "temperature_c":
+            reading.temperature_c,
+
         "relative_humidity_pct":
             reading.relative_humidity_pct,
-        "pressure_hpa": reading.pressure_hpa,
-        "anomaly": model_result["anomaly"],
+
+        "pressure_hpa":
+            reading.pressure_hpa,
+
+        "anomaly":
+            is_anomaly,
+
         "anomaly_score":
-            model_result["anomaly_score"],
+            round(
+                float(anomaly_proba),
+                3,
+            ),
+
         "weather_or_sensor":
-            model_result["weather_or_sensor"],
-        "confidence":
-            model_result["confidence"],
+            weather_or_sensor,
+
+        "confidence": (
+            round(
+                cause_confidence,
+                3,
+            )
+            if cause_confidence is not None
+            else None
+        ),
+
         "fault_component":
-            model_result["fault_component"],
-        "evidence":
-            model_result["evidence"],
+            fault_component,
+
+        "evidence": {
+
+            "temporal":
+                round(
+                    temporal_evidence,
+                    3,
+                ),
+
+            "spatial":
+                round(
+                    spatial_evidence,
+                    3,
+                ),
+
+            "multivariate":
+                round(
+                    multivariate_evidence,
+                    3,
+                ),
+        },
+
         "features_computed_count":
             len(features),
     }
+
+    return result
 
 
 def _persist_live_result(result):
@@ -2182,87 +1422,92 @@ def predict(
             .fillna(-999)
         )
 
-        anomaly_pred = model_anomaly.predict(row)[0]
-        anomaly_proba = model_anomaly.predict_proba(row)[0][1]
+        # ----------------------------------------------------
+        # Stage 1
+        # ----------------------------------------------------
+
+        anomaly_pred = (
+            model_anomaly
+            .predict(row)[0]
+        )
+
+        anomaly_proba = (
+            model_anomaly
+            .predict_proba(row)[0][1]
+        )
 
         is_anomaly = bool(
             int(anomaly_pred) == 1
         )
 
+        # ----------------------------------------------------
+        # Stage 2
+        # ----------------------------------------------------
+
         weather_or_sensor = "none"
+
         cause_confidence = None
 
         if is_anomaly:
 
-            cause_pred = model_cause.predict(row)[0]
-            cause_proba = model_cause.predict_proba(row)[0]
+            cause_pred = (
+                model_cause
+                .predict(row)[0]
+            )
 
-            weather_or_sensor = str(cause_pred)
+            cause_proba = (
+                model_cause
+                .predict_proba(row)[0]
+            )
+
+            weather_or_sensor = str(
+                cause_pred
+            )
+
             cause_confidence = float(
                 max(cause_proba)
             )
 
-        data_quality = 1.0 if any(
-            _safe_float(
-                f.get(name),
-                0,
-            ) == 1
-            for name in [
-                "is_missing_temperature",
-                "is_missing_humidity",
-                "is_missing_pressure",
-            ]
-        ) else 0.0
+        # ----------------------------------------------------
+        # Explainability
+        # ----------------------------------------------------
 
-        frozen_sensor = _clip01(
-            max(
-                _safe_float(
+        temporal_evidence = min(
+            abs(
+                float(
                     f.get(
-                        "temperature_stuck_count"
-                    ),
-                    0,
-                ),
-                _safe_float(
-                    f.get(
-                        "humidity_stuck_count"
-                    ),
-                    0,
-                ),
-                _safe_float(
-                    f.get(
-                        "pressure_stuck_count"
-                    ),
-                    0,
-                ),
-            ) / 4.0
+                        "temperature_zscore_6h"
+                    ) or 0
+                )
+            ) / 5,
+            1.0,
         )
 
-        physical = (
-            1.0
-            if _safe_float(
-                f.get(
-                    "physically_implausible_flag"
-                ),
-                0,
-            ) == 1
-            else 0.0
+        spatial_evidence = min(
+            abs(
+                float(
+                    f.get(
+                        "regional_temp_zscore"
+                    ) or 0
+                )
+            ) / 5,
+            1.0,
         )
 
-        if (
-            data_quality >= 1.0
-            or frozen_sensor >= 1.0
-            or physical >= 1.0
-        ):
-            is_anomaly = True
-            anomaly_proba = max(
-                float(anomaly_proba),
-                0.80,
-            )
-            weather_or_sensor = "sensor"
-            cause_confidence = max(
-                float(cause_confidence or 0.0),
-                0.80,
-            )
+        multivariate_evidence = min(
+            abs(
+                float(
+                    f.get(
+                        "dew_point_deficit_c"
+                    ) or 0
+                )
+            ) / 5,
+            1.0,
+        )
+
+        # ----------------------------------------------------
+        # Fault component
+        # ----------------------------------------------------
 
         fault_component = "none"
 
@@ -2272,28 +1517,28 @@ def predict(
         ):
 
             z_scores = {
+
                 "temperature": abs(
-                    _safe_float(
+                    float(
                         f.get(
                             "temperature_zscore_6h"
-                        ),
-                        0,
+                        ) or 0
                     )
                 ),
+
                 "humidity": abs(
-                    _safe_float(
+                    float(
                         f.get(
                             "humidity_zscore_6h"
-                        ),
-                        0,
+                        ) or 0
                     )
                 ),
+
                 "pressure": abs(
-                    _safe_float(
+                    float(
                         f.get(
                             "pressure_zscore_6h"
-                        ),
-                        0,
+                        ) or 0
                     )
                 ),
             }
@@ -2303,31 +1548,37 @@ def predict(
                 key=z_scores.get,
             )
 
-            if data_quality >= 1.0 or physical >= 1.0:
-                fault_component = "data_quality"
-            elif frozen_sensor >= 1.0:
-                fault_component = "sensor"
+        result = {
 
-        return {
             "station_id":
                 str(reading.station_id),
+
             "timestamp":
                 str(reading.timestamp),
+
             "temperature_c":
                 f.get("temperature_c"),
+
             "relative_humidity_pct":
-                f.get("relative_humidity_pct"),
+                f.get(
+                    "relative_humidity_pct"
+                ),
+
             "pressure_hpa":
                 f.get("pressure_hpa"),
+
             "anomaly":
                 is_anomaly,
+
             "anomaly_score":
                 round(
                     float(anomaly_proba),
                     3,
                 ),
+
             "weather_or_sensor":
                 weather_or_sensor,
+
             "confidence": (
                 round(
                     cause_confidence,
@@ -2336,71 +1587,36 @@ def predict(
                 if cause_confidence is not None
                 else None
             ),
+
             "fault_component":
                 fault_component,
+
             "evidence": {
+
                 "temporal":
-                    _feature_evidence(
-                        f.get(
-                            "temperature_zscore_6h"
-                        ),
-                        scale=3.0,
+                    round(
+                        temporal_evidence,
+                        3,
                     ),
+
                 "spatial":
-                    _feature_evidence(
-                        f.get(
-                            "regional_temp_zscore"
-                        ),
-                        scale=3.0,
+                    round(
+                        spatial_evidence,
+                        3,
                     ),
+
                 "multivariate":
-                    physical,
-                "data_quality":
-                    data_quality,
-                "frozen_sensor":
-                    frozen_sensor,
-                "drift":
-                    _clip01(
-                        max(
-                            abs(
-                                _safe_float(
-                                    f.get(
-                                        "temperature_roc_1h"
-                                    ),
-                                    0,
-                                )
-                            ) / 3.0,
-                            abs(
-                                _safe_float(
-                                    f.get(
-                                        "humidity_roc_1h"
-                                    ),
-                                    0,
-                                )
-                            ) / 15.0,
-                            abs(
-                                _safe_float(
-                                    f.get(
-                                        "pressure_roc_1h"
-                                    ),
-                                    0,
-                                )
-                            ) / 5.0,
-                        )
+                    round(
+                        multivariate_evidence,
+                        3,
                     ),
-                "regional_event": 0.0,
-                "network_coherence": 0.0,
-                "isolation": 0.0,
-                "sensor_fault":
-                    max(
-                        data_quality,
-                        frozen_sensor,
-                        physical,
-                    ),
-                "evidence_anomaly_score": 0.0,
-                "network_station_count": 0,
             },
         }
+
+        # Persist live reading.
+        insert_reading(result, source = "live")
+
+        return result
 
     except Exception as e:
 

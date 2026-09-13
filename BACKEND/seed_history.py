@@ -1,126 +1,355 @@
 """
-Populate the existing SkyGuardAI SQLite database with genuine historical
-benchmark telemetry for every AWS station.
+Seed genuine historical benchmark telemetry into SkyGuard AI PostgreSQL.
 
 Run from the BACKEND directory:
     python seed_history.py
 
-This script does NOT delete existing ML alert/prediction records. It adds
-normal historical telemetry from the real 700,800-row benchmark CSV, using
-seven complete days immediately before 2025-12-31 23:45:00.
+This script:
+- reads the genuine SIH26073 benchmark CSV
+- selects 7 complete days of history
+- inserts raw telemetry only
+- stores rows with source='historical'
+- never deletes or modifies live/demo records
+- is safe to run repeatedly
 """
+
 from pathlib import Path
-import sqlite3
+
 import pandas as pd
+import psycopg
+from psycopg.rows import dict_row
+
 
 BACKEND_DIR = Path(__file__).resolve().parent
-CSV_PATH = BACKEND_DIR.parent / "ML training" / "SIH26073_AP_AWS_observations.csv"
-DB_PATH = BACKEND_DIR / "weatherguard.db"
 
-REQUIRED = ["station_id", "timestamp", "temperature_c", "relative_humidity_pct", "pressure_hpa"]
+CSV_PATH = (
+    BACKEND_DIR.parent
+    / "ML training"
+    / "SIH26073_AP_AWS_observations.csv"
+)
+
+REQUIRED = [
+    "station_id",
+    "timestamp",
+    "temperature_c",
+    "relative_humidity_pct",
+    "pressure_hpa",
+]
+
+# Seven complete days immediately before Dec 31, 2025.
+END = pd.Timestamp("2025-12-30 23:45:00")
+START = END - pd.Timedelta(days=7) + pd.Timedelta(minutes=15)
+
+EXPECTED_PER_STATION = 7 * 96
+
+
+def get_connection():
+    import os
+
+    database_url = os.getenv("DATABASE_URL")
+
+    if not database_url:
+        raise RuntimeError(
+            "DATABASE_URL is not set.\n"
+            "Set it first, for example:\n"
+            '$env:DATABASE_URL="postgresql://postgres:PASSWORD@localhost:5432/skyguard"'
+        )
+
+    return psycopg.connect(
+        database_url,
+        row_factory=dict_row,
+    )
 
 
 def main() -> None:
     if not CSV_PATH.exists():
-        raise FileNotFoundError(f"Benchmark CSV not found: {CSV_PATH}")
-    if not DB_PATH.exists():
-        raise FileNotFoundError(f"SQLite database not found: {DB_PATH}")
+        raise FileNotFoundError(
+            f"Benchmark CSV not found: {CSV_PATH}"
+        )
 
-    print(f"Loading benchmark telemetry: {CSV_PATH}")
-    df = pd.read_csv(CSV_PATH, usecols=REQUIRED)
-    missing = [c for c in REQUIRED if c not in df.columns]
+    print(f"Loading benchmark telemetry:")
+    print(f"  {CSV_PATH}")
+
+    df = pd.read_csv(
+        CSV_PATH,
+        usecols=REQUIRED,
+    )
+
+    missing = [
+        column
+        for column in REQUIRED
+        if column not in df.columns
+    ]
+
     if missing:
-        raise RuntimeError(f"CSV is missing required columns: {missing}")
+        raise RuntimeError(
+            f"CSV is missing required columns: {missing}"
+        )
 
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-    df = df.dropna(subset=["station_id", "timestamp"])
-    for col in ["temperature_c", "relative_humidity_pct", "pressure_hpa"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df["timestamp"] = pd.to_datetime(
+        df["timestamp"],
+        errors="coerce",
+    )
 
-    # Use the same final seven-day benchmark window for every station.
-    # Dec 31 is intentionally excluded because the demo database already
-    # contains selected Dec 31 ML evaluation records.
-    end = pd.Timestamp("2025-12-30 23:45:00")
-    start = end - pd.Timedelta(days=7) + pd.Timedelta(minutes=15)
-    window = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)].copy()
-    window = window.sort_values(["station_id", "timestamp"])
+    df = df.dropna(
+        subset=["station_id", "timestamp"]
+    )
 
-    expected_per_station = 7 * 96
-    print(f"Selected window: {start} -> {end}")
-    print(f"Rows in window: {len(window):,}")
+    for column in [
+        "temperature_c",
+        "relative_humidity_pct",
+        "pressure_hpa",
+    ]:
+        df[column] = pd.to_numeric(
+            df[column],
+            errors="coerce",
+        )
 
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        # Verify the existing schema before inserting anything.
-        cols = {row[1] for row in conn.execute("PRAGMA table_info(readings)").fetchall()}
+    # Select the seven-day historical context window.
+    window = df[
+        (df["timestamp"] >= START)
+        & (df["timestamp"] <= END)
+    ].copy()
+
+    window = window.sort_values(
+        ["station_id", "timestamp"]
+    )
+
+    print()
+    print(f"Selected window:")
+    print(f"  {START} -> {END}")
+    print(f"Rows selected: {len(window):,}")
+    print(f"Stations: {window['station_id'].nunique()}")
+
+    expected_total = 20 * EXPECTED_PER_STATION
+
+    if len(window) != expected_total:
+        print()
+        print(
+            "WARNING: selected row count differs from "
+            f"expected {expected_total:,}."
+        )
+
+    with get_connection() as conn:
+
+        # Verify that the active PostgreSQL schema exists.
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'readings'
+                """
+            )
+
+            columns = {
+                row["column_name"]
+                for row in cur.fetchall()
+            }
+
         required_db = {
-            "station_id", "timestamp", "temperature_c", "relative_humidity_pct",
-            "pressure_hpa", "anomaly", "anomaly_score", "weather_or_sensor",
-            "confidence", "fault_component", "evidence_temporal",
-            "evidence_spatial", "evidence_multivariate",
+            "station_id",
+            "timestamp",
+            "temperature_c",
+            "relative_humidity_pct",
+            "pressure_hpa",
+            "anomaly",
+            "anomaly_score",
+            "weather_or_sensor",
+            "confidence",
+            "fault_component",
+            "evidence_temporal",
+            "evidence_spatial",
+            "evidence_multivariate",
+            "source",
         }
-        missing_db = required_db - cols
+
+        missing_db = required_db - columns
+
         if missing_db:
-            raise RuntimeError(f"Unexpected readings schema; missing columns: {sorted(missing_db)}")
+            raise RuntimeError(
+                "Unexpected PostgreSQL readings schema. "
+                f"Missing columns: {sorted(missing_db)}"
+            )
 
         inserted = 0
         skipped = 0
         station_counts = {}
 
-        for station_id, group in window.groupby("station_id", sort=True):
-            # Prefer exactly 672 observations; if the source has a small gap,
-            # use whatever valid observations exist rather than fabricating data.
-            group = group.dropna(subset=["temperature_c", "relative_humidity_pct", "pressure_hpa"])
-            station_counts[station_id] = len(group)
+        with conn.cursor() as cur:
 
-            for row in group.itertuples(index=False):
-                ts = row.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                exists = conn.execute(
-                    "SELECT 1 FROM readings WHERE station_id = ? AND timestamp = ? LIMIT 1",
-                    (str(station_id), ts),
-                ).fetchone()
-                if exists:
-                    skipped += 1
-                    continue
+            for station_id, group in window.groupby(
+                "station_id",
+                sort=True,
+            ):
 
-                conn.execute(
-                    """INSERT INTO readings (
-                        station_id, timestamp, temperature_c, relative_humidity_pct,
-                        pressure_hpa, anomaly, anomaly_score, weather_or_sensor,
-                        confidence, fault_component, evidence_temporal,
-                        evidence_spatial, evidence_multivariate, source
-                    ) VALUES (?, ?, ?, ?, ?, 0, 0.0, 'none', NULL, 'none', 0.0, 0.0, 0.0, 'historical')""",
-                    (
-                        str(station_id),
-                        ts,
-                        float(row.temperature_c),
-                        float(row.relative_humidity_pct),
-                        float(row.pressure_hpa),
-                    ),
+                group = group.dropna(
+                    subset=[
+                        "temperature_c",
+                        "relative_humidity_pct",
+                        "pressure_hpa",
+                    ]
                 )
-                inserted += 1
+
+                station_id = str(station_id)
+
+                station_counts[station_id] = len(group)
+
+                for row in group.itertuples(index=False):
+
+                    timestamp = pd.Timestamp(
+                        row.timestamp
+                    )
+
+                    # PostgreSQL uses TIMESTAMPTZ.
+                    # Benchmark timestamps are interpreted as
+                    # Asia/Kolkata local observations.
+                    timestamp = timestamp.tz_localize(
+                        "Asia/Kolkata"
+                    )
+
+                    # Idempotency check.
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM readings
+                        WHERE station_id = %s
+                          AND timestamp = %s
+                        LIMIT 1
+                        """,
+                        (
+                            station_id,
+                            timestamp.to_pydatetime(),
+                        ),
+                    )
+
+                    if cur.fetchone():
+                        skipped += 1
+                        continue
+
+                    cur.execute(
+                        """
+                        INSERT INTO readings (
+                            station_id,
+                            timestamp,
+                            temperature_c,
+                            relative_humidity_pct,
+                            pressure_hpa,
+                            anomaly,
+                            anomaly_score,
+                            weather_or_sensor,
+                            confidence,
+                            fault_component,
+                            evidence_temporal,
+                            evidence_spatial,
+                            evidence_multivariate,
+                            source
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            0,
+                            0.0,
+                            'none',
+                            NULL,
+                            'none',
+                            0.0,
+                            0.0,
+                            0.0,
+                            'historical'
+                        )
+                        """,
+                        (
+                            station_id,
+                            timestamp.to_pydatetime(),
+                            float(row.temperature_c),
+                            float(row.relative_humidity_pct),
+                            float(row.pressure_hpa),
+                        ),
+                    )
+
+                    inserted += 1
 
         conn.commit()
 
-        total = conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0]
-        station_total = conn.execute("SELECT COUNT(DISTINCT station_id) FROM readings").fetchone()[0]
-        alerts = conn.execute("SELECT COUNT(*) FROM readings WHERE anomaly = 1").fetchone()[0]
+        with conn.cursor() as cur:
 
-        print(f"Historical rows inserted : {inserted:,}")
-        print(f"Existing rows skipped     : {skipped:,}")
-        print(f"Database readings total   : {total:,}")
-        print(f"Stations represented      : {station_total}")
-        print(f"Existing anomaly records  : {alerts}")
-        print("\nPer-station historical rows:")
-        for station_id, count in sorted(station_counts.items()):
-            status = "OK" if count >= expected_per_station else "PARTIAL"
-            print(f"  {station_id}: {count:4d}  {status}")
+            cur.execute(
+                "SELECT COUNT(*) AS count FROM readings"
+            )
+            total = cur.fetchone()["count"]
 
-        if station_total < 20:
-            raise RuntimeError("Fewer than 20 stations are represented after seeding.")
-        print("\nSUCCESS: real benchmark history is now available for the station graphs.")
-    finally:
-        conn.close()
+            cur.execute(
+                """
+                SELECT COUNT(DISTINCT station_id) AS count
+                FROM readings
+                """
+            )
+            station_total = cur.fetchone()["count"]
+
+            cur.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM readings
+                WHERE source = 'historical'
+                """
+            )
+            historical_total = cur.fetchone()["count"]
+
+            cur.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM readings
+                WHERE anomaly = 1
+                """
+            )
+            alerts = cur.fetchone()["count"]
+
+    print()
+    print("========================================")
+    print(" HISTORICAL SEED RESULT")
+    print("========================================")
+    print(f"Historical rows inserted : {inserted:,}")
+    print(f"Existing rows skipped    : {skipped:,}")
+    print(f"Historical rows in DB    : {historical_total:,}")
+    print(f"Database readings total  : {total:,}")
+    print(f"Stations represented     : {station_total}")
+    print(f"Anomaly records          : {alerts}")
+
+    print()
+    print("Per-station historical rows:")
+
+    for station_id, count in sorted(
+        station_counts.items()
+    ):
+        status = (
+            "OK"
+            if count >= EXPECTED_PER_STATION
+            else "PARTIAL"
+        )
+
+        print(
+            f"  {station_id}: "
+            f"{count:4d}  {status}"
+        )
+
+    if station_total < 20:
+        raise RuntimeError(
+            "Fewer than 20 stations are represented "
+            "after historical seeding."
+        )
+
+    print()
+    print("SUCCESS")
+    print(
+        "Real benchmark history is now available "
+        "to the canonical feature engine."
+    )
 
 
 if __name__ == "__main__":

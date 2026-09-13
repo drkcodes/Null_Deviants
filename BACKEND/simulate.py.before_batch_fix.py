@@ -9,7 +9,7 @@ import requests
 # LOCAL SYSTEM CONFIGURATION
 # ============================================================
 
-API_URL = "http://127.0.0.1:8000/ingest/batch"
+API_URL = "http://127.0.0.1:8000/ingest"
 HEALTH_URL = "http://127.0.0.1:8000/"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -326,15 +326,8 @@ try:
         )
 
         # ----------------------------------------------------
-        # SEND THE COMPLETE NETWORK SNAPSHOT
+        # SEND ALL STATIONS FOR THIS TIMESTAMP
         # ----------------------------------------------------
-        #
-        # Every station at this benchmark timestamp is sent in
-        # ONE request. The backend therefore evaluates every
-        # station against the SAME contemporaneous snapshot.
-        # ----------------------------------------------------
-
-        readings_payload = []
 
         for _, row in group.iterrows():
 
@@ -350,6 +343,11 @@ try:
 
                 # ------------------------------------------------
                 # RAW TELEMETRY ONLY
+                #
+                # IMPORTANT:
+                # No pre-engineered features are sent.
+                #
+                # The backend computes all 50 model features.
                 # ------------------------------------------------
 
                 "temperature_c":
@@ -388,51 +386,31 @@ try:
                     ),
             }
 
-            readings_payload.append(payload)
+            try:
 
-        try:
-
-            response = requests.post(
-                API_URL,
-                json={
-                    "readings": readings_payload
-                },
-                timeout=10,
-            )
-
-            response.raise_for_status()
-
-            batch_result = response.json()
-
-            if "error" in batch_result:
-
-                error_count += len(
-                    readings_payload
+                response = requests.post(
+                    API_URL,
+                    json=payload,
+                    timeout=5,
                 )
 
-                print(
-                    f"[SERVER ERROR] "
-                    f"{current_timestamp.isoformat()} -> "
-                    f"{batch_result['error']}"
-                )
+                response.raise_for_status()
 
-            else:
+                result = response.json()
 
-                batch_results = batch_result.get(
-                    "results",
-                    [],
-                )
+                if "error" in result:
 
-                success_count += len(
-                    batch_results
-                )
+                    error_count += 1
 
-                for result in batch_results:
-
-                    station_id = result.get(
-                        "station_id",
-                        "unknown",
+                    print(
+                        f"[SERVER ERROR] "
+                        f"{row['station_id']} -> "
+                        f"{result['error']}"
                     )
+
+                else:
+
+                    success_count += 1
 
                     if result.get("anomaly"):
 
@@ -455,7 +433,7 @@ try:
                         print(
                             f"[ANOMALY] "
                             f"{current_timestamp.isoformat()} | "
-                            f"{station_id} | "
+                            f"{row['station_id']} | "
                             f"{classification} | "
                             f"{component} | "
                             f"confidence={confidence}"
@@ -466,24 +444,25 @@ try:
                         print(
                             f"[OK] "
                             f"{current_timestamp.isoformat()} | "
-                            f"{station_id}"
+                            f"{row['station_id']} | "
+                            f"T={payload['temperature_c']:.2f} C | "
+                            f"RH={payload['relative_humidity_pct']:.2f}% | "
+                            f"P={payload['pressure_hpa']:.2f} hPa"
                         )
 
-        except Exception as exc:
+            except Exception as exc:
 
-            error_count += len(
-                readings_payload
+                error_count += 1
+
+                print(
+                    f"[CONNECTION ERROR] "
+                    f"{row['station_id']} -> "
+                    f"{exc}"
+                )
+
+            time.sleep(
+                SEND_INTERVAL_SECONDS
             )
-
-            print(
-                f"[BATCH CONNECTION ERROR] "
-                f"{current_timestamp.isoformat()} -> "
-                f"{exc}"
-            )
-
-        time.sleep(
-            SEND_INTERVAL_SECONDS
-        )
 
         # ----------------------------------------------------
         # ADVANCE SIMULATED CLOCK ONLY AFTER ALL STATIONS

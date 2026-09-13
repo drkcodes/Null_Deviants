@@ -1,0 +1,2420 @@
+[
+  {
+    "name": "2G.1 Normal Telemetry",
+    "expected_anomaly": false,
+    "expected_classification": null,
+    "total": 20,
+    "anomalies": 19,
+    "weather": 0,
+    "sensor": 19,
+    "passed": false,
+    "results": [
+      {
+        "station_id": "AWS_AP01",
+        "result": {
+          "station_id": "AWS_AP01",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.297,
+          "relative_humidity_pct": 81.407,
+          "pressure_hpa": 1007.505,
+          "anomaly": true,
+          "anomaly_score": 0.757,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.741,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.326,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP02",
+        "result": {
+          "station_id": "AWS_AP02",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.493,
+          "relative_humidity_pct": 78.673,
+          "pressure_hpa": 1011.086,
+          "anomaly": true,
+          "anomaly_score": 0.753,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.867,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.284,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP03",
+        "result": {
+          "station_id": "AWS_AP03",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 18.082,
+          "relative_humidity_pct": 70.174,
+          "pressure_hpa": 991.123,
+          "anomaly": true,
+          "anomaly_score": 0.637,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.717,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.256,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP04",
+        "result": {
+          "station_id": "AWS_AP04",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.005,
+          "relative_humidity_pct": 78.145,
+          "pressure_hpa": 1010.806,
+          "anomaly": true,
+          "anomaly_score": 0.614,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.563,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.302,
+            "spatial": 0.21,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP05",
+        "result": {
+          "station_id": "AWS_AP05",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 18.412,
+          "relative_humidity_pct": 74.202,
+          "pressure_hpa": 978.368,
+          "anomaly": true,
+          "anomaly_score": 0.721,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.767,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.264,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP06",
+        "result": {
+          "station_id": "AWS_AP06",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.06,
+          "relative_humidity_pct": 77.678,
+          "pressure_hpa": 1014.382,
+          "anomaly": true,
+          "anomaly_score": 0.632,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.651,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.265,
+            "spatial": 0.117,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP07",
+        "result": {
+          "station_id": "AWS_AP07",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 22.284,
+          "relative_humidity_pct": 82.741,
+          "pressure_hpa": 1011.269,
+          "anomaly": true,
+          "anomaly_score": 0.61,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.932,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.243,
+            "spatial": 0.459,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP08",
+        "result": {
+          "station_id": "AWS_AP08",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 17.698,
+          "relative_humidity_pct": 70.604,
+          "pressure_hpa": 998.024,
+          "anomaly": true,
+          "anomaly_score": 0.675,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.634,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.283,
+            "spatial": 0.471,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP09",
+        "result": {
+          "station_id": "AWS_AP09",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 16.705,
+          "relative_humidity_pct": 67.114,
+          "pressure_hpa": 970.243,
+          "anomaly": true,
+          "anomaly_score": 0.726,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.789,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.261,
+            "spatial": 0.761,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP10",
+        "result": {
+          "station_id": "AWS_AP10",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.019,
+          "relative_humidity_pct": 82.034,
+          "pressure_hpa": 1010.692,
+          "anomaly": true,
+          "anomaly_score": 0.64,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.728,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.289,
+            "spatial": 0.002,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP11",
+        "result": {
+          "station_id": "AWS_AP11",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 16.892,
+          "relative_humidity_pct": 66.301,
+          "pressure_hpa": 973.269,
+          "anomaly": true,
+          "anomaly_score": 0.652,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.762,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.246,
+            "spatial": 0.225,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP12",
+        "result": {
+          "station_id": "AWS_AP12",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.534,
+          "relative_humidity_pct": 83.443,
+          "pressure_hpa": 1010.988,
+          "anomaly": true,
+          "anomaly_score": 0.758,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.815,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.278,
+            "spatial": 0.124,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP13",
+        "result": {
+          "station_id": "AWS_AP13",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 19.305,
+          "relative_humidity_pct": 79.565,
+          "pressure_hpa": 1013.545,
+          "anomaly": true,
+          "anomaly_score": 0.567,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.57,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.315,
+            "spatial": 0.463,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP14",
+        "result": {
+          "station_id": "AWS_AP14",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.185,
+          "relative_humidity_pct": 83.915,
+          "pressure_hpa": 1010.576,
+          "anomaly": true,
+          "anomaly_score": 0.672,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.63,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.287,
+            "spatial": 0.144,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP15",
+        "result": {
+          "station_id": "AWS_AP15",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 19.637,
+          "relative_humidity_pct": 84.718,
+          "pressure_hpa": 1013.222,
+          "anomaly": true,
+          "anomaly_score": 0.591,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.665,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.298,
+            "spatial": 0.251,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP16",
+        "result": {
+          "station_id": "AWS_AP16",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.586,
+          "relative_humidity_pct": 76.296,
+          "pressure_hpa": 997.573,
+          "anomaly": true,
+          "anomaly_score": 0.893,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.915,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.275,
+            "spatial": 0.02,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP17",
+        "result": {
+          "station_id": "AWS_AP17",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 17.344,
+          "relative_humidity_pct": 65.084,
+          "pressure_hpa": 994.573,
+          "anomaly": true,
+          "anomaly_score": 0.691,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.81,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.267,
+            "spatial": 0.058,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP18",
+        "result": {
+          "station_id": "AWS_AP18",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 16.125,
+          "relative_humidity_pct": 69.442,
+          "pressure_hpa": 950.238,
+          "anomaly": true,
+          "anomaly_score": 0.594,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.645,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.271,
+            "spatial": 0.418,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP19",
+        "result": {
+          "station_id": "AWS_AP19",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 19.887,
+          "relative_humidity_pct": 75.764,
+          "pressure_hpa": 1013.666,
+          "anomaly": true,
+          "anomaly_score": 0.572,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.666,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.281,
+            "spatial": 0.175,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP20",
+        "result": {
+          "station_id": "AWS_AP20",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 14.376,
+          "relative_humidity_pct": 63.75,
+          "pressure_hpa": 938.419,
+          "anomaly": false,
+          "anomaly_score": 0.458,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.294,
+            "spatial": 0.73,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      }
+    ]
+  },
+  {
+    "name": "2G.2 Regional Weather Event",
+    "expected_anomaly": true,
+    "expected_classification": "weather",
+    "total": 20,
+    "anomalies": 1,
+    "weather": 0,
+    "sensor": 1,
+    "passed": false,
+    "results": [
+      {
+        "station_id": "AWS_AP01",
+        "result": {
+          "station_id": "AWS_AP01",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 26.297,
+          "relative_humidity_pct": 71.407,
+          "pressure_hpa": 1002.505,
+          "anomaly": false,
+          "anomaly_score": 0.371,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.3,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP02",
+        "result": {
+          "station_id": "AWS_AP02",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 27.493,
+          "relative_humidity_pct": 68.673,
+          "pressure_hpa": 1006.086,
+          "anomaly": false,
+          "anomaly_score": 0.387,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.378,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP03",
+        "result": {
+          "station_id": "AWS_AP03",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 24.082,
+          "relative_humidity_pct": 60.17400000000001,
+          "pressure_hpa": 986.123,
+          "anomaly": false,
+          "anomaly_score": 0.428,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.172,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP04",
+        "result": {
+          "station_id": "AWS_AP04",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 26.005,
+          "relative_humidity_pct": 68.145,
+          "pressure_hpa": 1005.806,
+          "anomaly": false,
+          "anomaly_score": 0.377,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.337,
+            "spatial": 0.21,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP05",
+        "result": {
+          "station_id": "AWS_AP05",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 24.412,
+          "relative_humidity_pct": 64.202,
+          "pressure_hpa": 973.368,
+          "anomaly": false,
+          "anomaly_score": 0.481,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.189,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP06",
+        "result": {
+          "station_id": "AWS_AP06",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 27.06,
+          "relative_humidity_pct": 67.678,
+          "pressure_hpa": 1009.382,
+          "anomaly": false,
+          "anomaly_score": 0.382,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.369,
+            "spatial": 0.117,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP07",
+        "result": {
+          "station_id": "AWS_AP07",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 28.284,
+          "relative_humidity_pct": 72.741,
+          "pressure_hpa": 1006.269,
+          "anomaly": false,
+          "anomaly_score": 0.481,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.387,
+            "spatial": 0.459,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP08",
+        "result": {
+          "station_id": "AWS_AP08",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 23.698,
+          "relative_humidity_pct": 60.604,
+          "pressure_hpa": 993.024,
+          "anomaly": false,
+          "anomaly_score": 0.383,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.146,
+            "spatial": 0.471,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP09",
+        "result": {
+          "station_id": "AWS_AP09",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 22.705,
+          "relative_humidity_pct": 57.114000000000004,
+          "pressure_hpa": 965.243,
+          "anomaly": false,
+          "anomaly_score": 0.365,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.21,
+            "spatial": 0.761,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP10",
+        "result": {
+          "station_id": "AWS_AP10",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 27.019,
+          "relative_humidity_pct": 72.034,
+          "pressure_hpa": 1005.692,
+          "anomaly": false,
+          "anomaly_score": 0.357,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.387,
+            "spatial": 0.002,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP11",
+        "result": {
+          "station_id": "AWS_AP11",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 22.892,
+          "relative_humidity_pct": 56.301,
+          "pressure_hpa": 968.269,
+          "anomaly": false,
+          "anomaly_score": 0.36,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.187,
+            "spatial": 0.225,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP12",
+        "result": {
+          "station_id": "AWS_AP12",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 27.534,
+          "relative_humidity_pct": 73.443,
+          "pressure_hpa": 1005.988,
+          "anomaly": false,
+          "anomaly_score": 0.386,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.384,
+            "spatial": 0.124,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP13",
+        "result": {
+          "station_id": "AWS_AP13",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 25.305,
+          "relative_humidity_pct": 69.565,
+          "pressure_hpa": 1008.545,
+          "anomaly": false,
+          "anomaly_score": 0.319,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.309,
+            "spatial": 0.463,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP14",
+        "result": {
+          "station_id": "AWS_AP14",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 26.185,
+          "relative_humidity_pct": 73.915,
+          "pressure_hpa": 1005.576,
+          "anomaly": false,
+          "anomaly_score": 0.325,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.352,
+            "spatial": 0.144,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP15",
+        "result": {
+          "station_id": "AWS_AP15",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 25.637,
+          "relative_humidity_pct": 74.718,
+          "pressure_hpa": 1008.222,
+          "anomaly": false,
+          "anomaly_score": 0.296,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.318,
+            "spatial": 0.251,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP16",
+        "result": {
+          "station_id": "AWS_AP16",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 26.586,
+          "relative_humidity_pct": 66.296,
+          "pressure_hpa": 992.573,
+          "anomaly": true,
+          "anomaly_score": 0.511,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.608,
+          "fault_component": "pressure",
+          "evidence": {
+            "temporal": 0.386,
+            "spatial": 0.02,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP17",
+        "result": {
+          "station_id": "AWS_AP17",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 23.344,
+          "relative_humidity_pct": 55.084,
+          "pressure_hpa": 989.573,
+          "anomaly": false,
+          "anomaly_score": 0.334,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.199,
+            "spatial": 0.058,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP18",
+        "result": {
+          "station_id": "AWS_AP18",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 22.125,
+          "relative_humidity_pct": 59.44199999999999,
+          "pressure_hpa": 945.238,
+          "anomaly": false,
+          "anomaly_score": 0.347,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.155,
+            "spatial": 0.418,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP19",
+        "result": {
+          "station_id": "AWS_AP19",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 25.887,
+          "relative_humidity_pct": 65.764,
+          "pressure_hpa": 1008.666,
+          "anomaly": false,
+          "anomaly_score": 0.356,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.347,
+            "spatial": 0.175,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP20",
+        "result": {
+          "station_id": "AWS_AP20",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.375999999999998,
+          "relative_humidity_pct": 53.75,
+          "pressure_hpa": 933.419,
+          "anomaly": false,
+          "anomaly_score": 0.303,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.134,
+            "spatial": 0.73,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      }
+    ]
+  },
+  {
+    "name": "2G.3 Isolated Sensor Spike",
+    "expected_anomaly": true,
+    "expected_classification": "sensor",
+    "total": 20,
+    "anomalies": 19,
+    "weather": 0,
+    "sensor": 19,
+    "passed": true,
+    "results": [
+      {
+        "station_id": "AWS_AP01",
+        "result": {
+          "station_id": "AWS_AP01",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.297,
+          "relative_humidity_pct": 81.407,
+          "pressure_hpa": 1007.505,
+          "anomaly": true,
+          "anomaly_score": 0.757,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.741,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.326,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP02",
+        "result": {
+          "station_id": "AWS_AP02",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.493,
+          "relative_humidity_pct": 78.673,
+          "pressure_hpa": 1011.086,
+          "anomaly": true,
+          "anomaly_score": 0.753,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.867,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.284,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP03",
+        "result": {
+          "station_id": "AWS_AP03",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 18.082,
+          "relative_humidity_pct": 70.174,
+          "pressure_hpa": 991.123,
+          "anomaly": true,
+          "anomaly_score": 0.637,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.717,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.256,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP04",
+        "result": {
+          "station_id": "AWS_AP04",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.005,
+          "relative_humidity_pct": 78.145,
+          "pressure_hpa": 1010.806,
+          "anomaly": true,
+          "anomaly_score": 0.614,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.563,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.302,
+            "spatial": 0.21,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP05",
+        "result": {
+          "station_id": "AWS_AP05",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 18.412,
+          "relative_humidity_pct": 74.202,
+          "pressure_hpa": 978.368,
+          "anomaly": true,
+          "anomaly_score": 0.721,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.767,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.264,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP06",
+        "result": {
+          "station_id": "AWS_AP06",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.06,
+          "relative_humidity_pct": 77.678,
+          "pressure_hpa": 1014.382,
+          "anomaly": true,
+          "anomaly_score": 0.632,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.651,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.265,
+            "spatial": 0.117,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP07",
+        "result": {
+          "station_id": "AWS_AP07",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 22.284,
+          "relative_humidity_pct": 82.741,
+          "pressure_hpa": 1011.269,
+          "anomaly": true,
+          "anomaly_score": 0.61,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.932,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.243,
+            "spatial": 0.459,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP08",
+        "result": {
+          "station_id": "AWS_AP08",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 32.698,
+          "relative_humidity_pct": 70.604,
+          "pressure_hpa": 998.024,
+          "anomaly": true,
+          "anomaly_score": 0.637,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.614,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.615,
+            "spatial": 1.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP09",
+        "result": {
+          "station_id": "AWS_AP09",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 16.705,
+          "relative_humidity_pct": 67.114,
+          "pressure_hpa": 970.243,
+          "anomaly": true,
+          "anomaly_score": 0.701,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.795,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.261,
+            "spatial": 0.152,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP10",
+        "result": {
+          "station_id": "AWS_AP10",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.019,
+          "relative_humidity_pct": 82.034,
+          "pressure_hpa": 1010.692,
+          "anomaly": true,
+          "anomaly_score": 0.64,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.728,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.289,
+            "spatial": 0.002,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP11",
+        "result": {
+          "station_id": "AWS_AP11",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 16.892,
+          "relative_humidity_pct": 66.301,
+          "pressure_hpa": 973.269,
+          "anomaly": true,
+          "anomaly_score": 0.667,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.762,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.246,
+            "spatial": 0.122,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP12",
+        "result": {
+          "station_id": "AWS_AP12",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.534,
+          "relative_humidity_pct": 83.443,
+          "pressure_hpa": 1010.988,
+          "anomaly": true,
+          "anomaly_score": 0.758,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.815,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.278,
+            "spatial": 0.124,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP13",
+        "result": {
+          "station_id": "AWS_AP13",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 19.305,
+          "relative_humidity_pct": 79.565,
+          "pressure_hpa": 1013.545,
+          "anomaly": true,
+          "anomaly_score": 0.567,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.57,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.315,
+            "spatial": 0.463,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP14",
+        "result": {
+          "station_id": "AWS_AP14",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.185,
+          "relative_humidity_pct": 83.915,
+          "pressure_hpa": 1010.576,
+          "anomaly": true,
+          "anomaly_score": 0.672,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.63,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.287,
+            "spatial": 0.144,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP15",
+        "result": {
+          "station_id": "AWS_AP15",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 19.637,
+          "relative_humidity_pct": 84.718,
+          "pressure_hpa": 1013.222,
+          "anomaly": true,
+          "anomaly_score": 0.591,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.665,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.298,
+            "spatial": 0.251,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP16",
+        "result": {
+          "station_id": "AWS_AP16",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.586,
+          "relative_humidity_pct": 76.296,
+          "pressure_hpa": 997.573,
+          "anomaly": true,
+          "anomaly_score": 0.893,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.915,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.275,
+            "spatial": 0.02,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP17",
+        "result": {
+          "station_id": "AWS_AP17",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 17.344,
+          "relative_humidity_pct": 65.084,
+          "pressure_hpa": 994.573,
+          "anomaly": true,
+          "anomaly_score": 0.689,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.815,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.267,
+            "spatial": 0.094,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP18",
+        "result": {
+          "station_id": "AWS_AP18",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 16.125,
+          "relative_humidity_pct": 69.442,
+          "pressure_hpa": 950.238,
+          "anomaly": true,
+          "anomaly_score": 0.592,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.635,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.271,
+            "spatial": 0.125,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP19",
+        "result": {
+          "station_id": "AWS_AP19",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 19.887,
+          "relative_humidity_pct": 75.764,
+          "pressure_hpa": 1013.666,
+          "anomaly": true,
+          "anomaly_score": 0.572,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.666,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.281,
+            "spatial": 0.175,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP20",
+        "result": {
+          "station_id": "AWS_AP20",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 14.376,
+          "relative_humidity_pct": 63.75,
+          "pressure_hpa": 938.419,
+          "anomaly": false,
+          "anomaly_score": 0.462,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.294,
+            "spatial": 0.173,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      }
+    ]
+  },
+  {
+    "name": "2G.4 Gradual Sensor Drift",
+    "expected_anomaly": true,
+    "expected_classification": "sensor",
+    "total": 5,
+    "anomalies": 4,
+    "weather": 0,
+    "sensor": 4,
+    "passed": true,
+    "results": [
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T00:15:00+05:30",
+        "temperature_c": 18.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.692,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.595,
+        "fault_component": "humidity",
+        "evidence": {
+          "temporal": 0.216,
+          "spatial": 0.387,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      },
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T00:15:00+05:30",
+        "temperature_c": 19.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.651,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.588,
+        "fault_component": "humidity",
+        "evidence": {
+          "temporal": 0.147,
+          "spatial": 0.372,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      },
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T00:15:00+05:30",
+        "temperature_c": 20.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": false,
+        "anomaly_score": 0.492,
+        "weather_or_sensor": "none",
+        "confidence": null,
+        "fault_component": "none",
+        "evidence": {
+          "temporal": 0.074,
+          "spatial": 0.436,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      },
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T00:15:00+05:30",
+        "temperature_c": 21.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.502,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.617,
+        "fault_component": "humidity",
+        "evidence": {
+          "temporal": 0.0,
+          "spatial": 0.473,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      },
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T00:15:00+05:30",
+        "temperature_c": 22.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.525,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.622,
+        "fault_component": "humidity",
+        "evidence": {
+          "temporal": 0.073,
+          "spatial": 0.495,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      }
+    ]
+  },
+  {
+    "name": "2G.5 Frozen Sensor",
+    "expected_anomaly": true,
+    "expected_classification": "sensor",
+    "total": 8,
+    "anomalies": 8,
+    "weather": 0,
+    "sensor": 8,
+    "passed": true,
+    "results": [
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T00:15:00+05:30",
+        "temperature_c": 17.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.68,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.659,
+        "fault_component": "temperature",
+        "evidence": {
+          "temporal": 0.283,
+          "spatial": 0.0,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      },
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T00:30:00+05:30",
+        "temperature_c": 17.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.739,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.771,
+        "fault_component": "temperature",
+        "evidence": {
+          "temporal": 0.262,
+          "spatial": 0.0,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      },
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T00:45:00+05:30",
+        "temperature_c": 17.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.746,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.786,
+        "fault_component": "temperature",
+        "evidence": {
+          "temporal": 0.245,
+          "spatial": 0.0,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      },
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T01:00:00+05:30",
+        "temperature_c": 17.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.75,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.776,
+        "fault_component": "temperature",
+        "evidence": {
+          "temporal": 0.231,
+          "spatial": 0.0,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      },
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T01:15:00+05:30",
+        "temperature_c": 17.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.722,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.806,
+        "fault_component": "temperature",
+        "evidence": {
+          "temporal": 0.215,
+          "spatial": 0.0,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      },
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T01:30:00+05:30",
+        "temperature_c": 17.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.731,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.812,
+        "fault_component": "temperature",
+        "evidence": {
+          "temporal": 0.204,
+          "spatial": 0.0,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      },
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T01:45:00+05:30",
+        "temperature_c": 17.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.726,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.831,
+        "fault_component": "temperature",
+        "evidence": {
+          "temporal": 0.191,
+          "spatial": 0.0,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      },
+      {
+        "station_id": "AWS_AP08",
+        "timestamp": "2025-12-31T02:00:00+05:30",
+        "temperature_c": 17.698,
+        "relative_humidity_pct": 70.604,
+        "pressure_hpa": 998.024,
+        "anomaly": true,
+        "anomaly_score": 0.721,
+        "weather_or_sensor": "sensor",
+        "confidence": 0.806,
+        "fault_component": "temperature",
+        "evidence": {
+          "temporal": 0.178,
+          "spatial": 0.0,
+          "multivariate": 0.0
+        },
+        "features_computed_count": 50
+      }
+    ]
+  },
+  {
+    "name": "2G.6 Missing Telemetry",
+    "expected_anomaly": true,
+    "expected_classification": "sensor",
+    "total": 20,
+    "anomalies": 19,
+    "weather": 0,
+    "sensor": 19,
+    "passed": true,
+    "results": [
+      {
+        "station_id": "AWS_AP01",
+        "result": {
+          "station_id": "AWS_AP01",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.297,
+          "relative_humidity_pct": 81.407,
+          "pressure_hpa": 1007.505,
+          "anomaly": true,
+          "anomaly_score": 0.757,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.741,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.326,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP02",
+        "result": {
+          "station_id": "AWS_AP02",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.493,
+          "relative_humidity_pct": 78.673,
+          "pressure_hpa": 1011.086,
+          "anomaly": true,
+          "anomaly_score": 0.753,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.867,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.284,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP03",
+        "result": {
+          "station_id": "AWS_AP03",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 18.082,
+          "relative_humidity_pct": 70.174,
+          "pressure_hpa": 991.123,
+          "anomaly": true,
+          "anomaly_score": 0.637,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.717,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.256,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP04",
+        "result": {
+          "station_id": "AWS_AP04",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.005,
+          "relative_humidity_pct": 78.145,
+          "pressure_hpa": 1010.806,
+          "anomaly": true,
+          "anomaly_score": 0.614,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.563,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.302,
+            "spatial": 0.21,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP05",
+        "result": {
+          "station_id": "AWS_AP05",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 18.412,
+          "relative_humidity_pct": 74.202,
+          "pressure_hpa": 978.368,
+          "anomaly": true,
+          "anomaly_score": 0.721,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.767,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.264,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP06",
+        "result": {
+          "station_id": "AWS_AP06",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.06,
+          "relative_humidity_pct": 77.678,
+          "pressure_hpa": 1014.382,
+          "anomaly": true,
+          "anomaly_score": 0.632,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.651,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.265,
+            "spatial": 0.117,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP07",
+        "result": {
+          "station_id": "AWS_AP07",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 22.284,
+          "relative_humidity_pct": 82.741,
+          "pressure_hpa": 1011.269,
+          "anomaly": true,
+          "anomaly_score": 0.61,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.932,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.243,
+            "spatial": 0.459,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP08",
+        "result": {
+          "station_id": "AWS_AP08",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": null,
+          "relative_humidity_pct": null,
+          "pressure_hpa": null,
+          "anomaly": true,
+          "anomaly_score": 0.878,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.945,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.0,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP09",
+        "result": {
+          "station_id": "AWS_AP09",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 16.705,
+          "relative_humidity_pct": 67.114,
+          "pressure_hpa": 970.243,
+          "anomaly": true,
+          "anomaly_score": 0.726,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.789,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.261,
+            "spatial": 1.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP10",
+        "result": {
+          "station_id": "AWS_AP10",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.019,
+          "relative_humidity_pct": 82.034,
+          "pressure_hpa": 1010.692,
+          "anomaly": true,
+          "anomaly_score": 0.64,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.728,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.289,
+            "spatial": 0.002,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP11",
+        "result": {
+          "station_id": "AWS_AP11",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 16.892,
+          "relative_humidity_pct": 66.301,
+          "pressure_hpa": 973.269,
+          "anomaly": true,
+          "anomaly_score": 0.657,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.767,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.246,
+            "spatial": 0.186,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP12",
+        "result": {
+          "station_id": "AWS_AP12",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.534,
+          "relative_humidity_pct": 83.443,
+          "pressure_hpa": 1010.988,
+          "anomaly": true,
+          "anomaly_score": 0.758,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.815,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.278,
+            "spatial": 0.124,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP13",
+        "result": {
+          "station_id": "AWS_AP13",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 19.305,
+          "relative_humidity_pct": 79.565,
+          "pressure_hpa": 1013.545,
+          "anomaly": true,
+          "anomaly_score": 0.567,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.57,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.315,
+            "spatial": 0.463,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP14",
+        "result": {
+          "station_id": "AWS_AP14",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.185,
+          "relative_humidity_pct": 83.915,
+          "pressure_hpa": 1010.576,
+          "anomaly": true,
+          "anomaly_score": 0.672,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.63,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.287,
+            "spatial": 0.144,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP15",
+        "result": {
+          "station_id": "AWS_AP15",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 19.637,
+          "relative_humidity_pct": 84.718,
+          "pressure_hpa": 1013.222,
+          "anomaly": true,
+          "anomaly_score": 0.591,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.665,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.298,
+            "spatial": 0.251,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP16",
+        "result": {
+          "station_id": "AWS_AP16",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 20.586,
+          "relative_humidity_pct": 76.296,
+          "pressure_hpa": 997.573,
+          "anomaly": true,
+          "anomaly_score": 0.893,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.915,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.275,
+            "spatial": 0.02,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP17",
+        "result": {
+          "station_id": "AWS_AP17",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 17.344,
+          "relative_humidity_pct": 65.084,
+          "pressure_hpa": 994.573,
+          "anomaly": true,
+          "anomaly_score": 0.652,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.82,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.267,
+            "spatial": 0.042,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP18",
+        "result": {
+          "station_id": "AWS_AP18",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 16.125,
+          "relative_humidity_pct": 69.442,
+          "pressure_hpa": 950.238,
+          "anomaly": true,
+          "anomaly_score": 0.594,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.645,
+          "fault_component": "temperature",
+          "evidence": {
+            "temporal": 0.271,
+            "spatial": 0.368,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP19",
+        "result": {
+          "station_id": "AWS_AP19",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 19.887,
+          "relative_humidity_pct": 75.764,
+          "pressure_hpa": 1013.666,
+          "anomaly": true,
+          "anomaly_score": 0.572,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.666,
+          "fault_component": "humidity",
+          "evidence": {
+            "temporal": 0.281,
+            "spatial": 0.175,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP20",
+        "result": {
+          "station_id": "AWS_AP20",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 14.376,
+          "relative_humidity_pct": 63.75,
+          "pressure_hpa": 938.419,
+          "anomaly": false,
+          "anomaly_score": 0.458,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.294,
+            "spatial": 0.667,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      }
+    ]
+  },
+  {
+    "name": "2G.7 Regional vs Isolated Discrimination",
+    "expected_anomaly": true,
+    "expected_classification": "sensor",
+    "total": 20,
+    "anomalies": 4,
+    "weather": 0,
+    "sensor": 4,
+    "passed": true,
+    "results": [
+      {
+        "station_id": "AWS_AP01",
+        "result": {
+          "station_id": "AWS_AP01",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 27.297,
+          "relative_humidity_pct": 69.407,
+          "pressure_hpa": 1001.505,
+          "anomaly": false,
+          "anomaly_score": 0.41,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.389,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP02",
+        "result": {
+          "station_id": "AWS_AP02",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 28.493,
+          "relative_humidity_pct": 66.673,
+          "pressure_hpa": 1005.086,
+          "anomaly": false,
+          "anomaly_score": 0.446,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.462,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP03",
+        "result": {
+          "station_id": "AWS_AP03",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 25.082,
+          "relative_humidity_pct": 58.17400000000001,
+          "pressure_hpa": 985.123,
+          "anomaly": false,
+          "anomaly_score": 0.479,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.24,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP04",
+        "result": {
+          "station_id": "AWS_AP04",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 27.005,
+          "relative_humidity_pct": 66.145,
+          "pressure_hpa": 1004.806,
+          "anomaly": false,
+          "anomaly_score": 0.392,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.423,
+            "spatial": 0.21,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP05",
+        "result": {
+          "station_id": "AWS_AP05",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 25.412,
+          "relative_humidity_pct": 62.202,
+          "pressure_hpa": 972.368,
+          "anomaly": true,
+          "anomaly_score": 0.521,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.739,
+          "fault_component": "pressure",
+          "evidence": {
+            "temporal": 0.26,
+            "spatial": 0.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP06",
+        "result": {
+          "station_id": "AWS_AP06",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 28.06,
+          "relative_humidity_pct": 65.678,
+          "pressure_hpa": 1008.382,
+          "anomaly": false,
+          "anomaly_score": 0.418,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.451,
+            "spatial": 0.117,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP07",
+        "result": {
+          "station_id": "AWS_AP07",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 29.284,
+          "relative_humidity_pct": 70.741,
+          "pressure_hpa": 1005.269,
+          "anomaly": true,
+          "anomaly_score": 0.52,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.729,
+          "fault_component": "pressure",
+          "evidence": {
+            "temporal": 0.466,
+            "spatial": 0.459,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP08",
+        "result": {
+          "station_id": "AWS_AP08",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 42.698,
+          "relative_humidity_pct": 58.604,
+          "pressure_hpa": 992.024,
+          "anomaly": true,
+          "anomaly_score": 0.542,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.59,
+          "fault_component": "pressure",
+          "evidence": {
+            "temporal": 0.804,
+            "spatial": 1.0,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP09",
+        "result": {
+          "station_id": "AWS_AP09",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 23.705,
+          "relative_humidity_pct": 55.114000000000004,
+          "pressure_hpa": 964.243,
+          "anomaly": false,
+          "anomaly_score": 0.43,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.283,
+            "spatial": 0.146,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP10",
+        "result": {
+          "station_id": "AWS_AP10",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 28.019,
+          "relative_humidity_pct": 70.034,
+          "pressure_hpa": 1004.692,
+          "anomaly": false,
+          "anomaly_score": 0.462,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.472,
+            "spatial": 0.002,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP11",
+        "result": {
+          "station_id": "AWS_AP11",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 23.892,
+          "relative_humidity_pct": 54.301,
+          "pressure_hpa": 967.269,
+          "anomaly": false,
+          "anomaly_score": 0.442,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.255,
+            "spatial": 0.118,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP12",
+        "result": {
+          "station_id": "AWS_AP12",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 28.534,
+          "relative_humidity_pct": 71.443,
+          "pressure_hpa": 1004.988,
+          "anomaly": false,
+          "anomaly_score": 0.427,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.468,
+            "spatial": 0.124,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP13",
+        "result": {
+          "station_id": "AWS_AP13",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 26.305,
+          "relative_humidity_pct": 67.565,
+          "pressure_hpa": 1007.545,
+          "anomaly": false,
+          "anomaly_score": 0.291,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.397,
+            "spatial": 0.463,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP14",
+        "result": {
+          "station_id": "AWS_AP14",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 27.185,
+          "relative_humidity_pct": 71.915,
+          "pressure_hpa": 1004.576,
+          "anomaly": false,
+          "anomaly_score": 0.378,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.437,
+            "spatial": 0.144,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP15",
+        "result": {
+          "station_id": "AWS_AP15",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 26.637,
+          "relative_humidity_pct": 72.718,
+          "pressure_hpa": 1007.222,
+          "anomaly": false,
+          "anomaly_score": 0.292,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.403,
+            "spatial": 0.251,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP16",
+        "result": {
+          "station_id": "AWS_AP16",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 27.586,
+          "relative_humidity_pct": 64.296,
+          "pressure_hpa": 991.573,
+          "anomaly": true,
+          "anomaly_score": 0.533,
+          "weather_or_sensor": "sensor",
+          "confidence": 0.702,
+          "fault_component": "pressure",
+          "evidence": {
+            "temporal": 0.47,
+            "spatial": 0.02,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP17",
+        "result": {
+          "station_id": "AWS_AP17",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 24.344,
+          "relative_humidity_pct": 53.084,
+          "pressure_hpa": 988.573,
+          "anomaly": false,
+          "anomaly_score": 0.388,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.272,
+            "spatial": 0.093,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP18",
+        "result": {
+          "station_id": "AWS_AP18",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 23.125,
+          "relative_humidity_pct": 57.44199999999999,
+          "pressure_hpa": 944.238,
+          "anomaly": false,
+          "anomaly_score": 0.402,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.224,
+            "spatial": 0.118,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP19",
+        "result": {
+          "station_id": "AWS_AP19",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 26.887,
+          "relative_humidity_pct": 63.763999999999996,
+          "pressure_hpa": 1007.666,
+          "anomaly": false,
+          "anomaly_score": 0.368,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.43,
+            "spatial": 0.175,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      },
+      {
+        "station_id": "AWS_AP20",
+        "result": {
+          "station_id": "AWS_AP20",
+          "timestamp": "2025-12-31T00:15:00+05:30",
+          "temperature_c": 21.375999999999998,
+          "relative_humidity_pct": 51.75,
+          "pressure_hpa": 932.419,
+          "anomaly": false,
+          "anomaly_score": 0.285,
+          "weather_or_sensor": "none",
+          "confidence": null,
+          "fault_component": "none",
+          "evidence": {
+            "temporal": 0.204,
+            "spatial": 0.157,
+            "multivariate": 0.0
+          },
+          "features_computed_count": 50
+        }
+      }
+    ]
+  }
+]

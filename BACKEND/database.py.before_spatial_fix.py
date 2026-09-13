@@ -412,17 +412,12 @@ def get_latest_station_context(
     max_age_seconds=1800,
 ):
     """
-    Return readings from all stations at the exact supplied
-    timestamp.
+    Return the latest historical/live reading for each station
+    close to the supplied timestamp.
 
-    Spatial features must compare contemporaneous observations.
-    A reading from an earlier or later timestamp must not be used
-    as a substitute for the requested observation.
+    This provides multistation context for spatial features.
 
     Demo data is excluded.
-
-    max_age_seconds is retained in the function signature for
-    compatibility with existing callers.
     """
 
     with get_connection() as conn:
@@ -430,7 +425,7 @@ def get_latest_station_context(
         with conn.cursor() as cur:
 
             cur.execute("""
-                SELECT
+                SELECT DISTINCT ON (station_id)
                     station_id,
                     timestamp,
                     temperature_c,
@@ -441,9 +436,25 @@ def get_latest_station_context(
                     'historical',
                     'live'
                 )
-                  AND timestamp = %s
-                ORDER BY station_id
+                  AND timestamp BETWEEN
+                      (%s - (%s * INTERVAL '1 second'))
+                      AND
+                      (%s + (%s * INTERVAL '1 second'))
+                ORDER BY
+                    station_id,
+                    ABS(
+                        EXTRACT(
+                            EPOCH FROM (
+                                timestamp - %s
+                            )
+                        )
+                    ),
+                    id DESC
             """, (
+                timestamp,
+                max_age_seconds,
+                timestamp,
+                max_age_seconds,
                 timestamp,
             ))
 
