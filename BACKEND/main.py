@@ -999,7 +999,7 @@ def predict(
         }
 
         # Persist live reading.
-        insert_reading(result)
+        insert_reading(result, source = "live")
 
         return result
 
@@ -1308,7 +1308,8 @@ def simulate(
         }
 
         insert_reading(
-            database_result
+            database_result,
+            source = "demo"
         )
 
         return result

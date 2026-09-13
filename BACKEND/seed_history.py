@@ -88,8 +88,8 @@ def main() -> None:
                         station_id, timestamp, temperature_c, relative_humidity_pct,
                         pressure_hpa, anomaly, anomaly_score, weather_or_sensor,
                         confidence, fault_component, evidence_temporal,
-                        evidence_spatial, evidence_multivariate
-                    ) VALUES (?, ?, ?, ?, ?, 0, 0.0, 'none', NULL, 'none', 0.0, 0.0, 0.0)""",
+                        evidence_spatial, evidence_multivariate, source
+                    ) VALUES (?, ?, ?, ?, ?, 0, 0.0, 'none', NULL, 'none', 0.0, 0.0, 0.0, 'historical')""",
                     (
                         str(station_id),
                         ts,

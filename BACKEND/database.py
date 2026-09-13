@@ -2,11 +2,6 @@ import sqlite3
 
 DB_PATH = "weatherguard.db"
 
-# An anomaly is considered "active" on the live dashboard
-# if it was generated within this time window.
-ACTIVE_ALERT_WINDOW_MINUTES = 30
-
-
 def get_connection():
     return sqlite3.connect(DB_PATH)
 
@@ -30,9 +25,27 @@ def init_db():
             fault_component TEXT,
             evidence_temporal REAL,
             evidence_spatial REAL,
-            evidence_multivariate REAL
+            evidence_multivariate REAL,
+            source TEXT NOT NULL DEFAULT 'legacy'
         )
     """)
+
+    # --------------------------------------------------------
+    # Migrate an older database that does not have source.
+    # --------------------------------------------------------
+
+    columns = {
+        row[1]
+        for row in cur.execute(
+            "PRAGMA table_info(readings)"
+        ).fetchall()
+    }
+
+    if "source" not in columns:
+        cur.execute("""
+            ALTER TABLE readings
+            ADD COLUMN source TEXT NOT NULL DEFAULT 'legacy'
+        """)
 
     conn.commit()
     conn.close()
@@ -40,7 +53,7 @@ def init_db():
     print("Database initialized. Table 'readings' ready.")
 
 
-def insert_reading(data: dict):
+def insert_reading(data: dict, source: str = "live"):
     conn = get_connection()
     cur = conn.cursor()
 
@@ -58,9 +71,10 @@ def insert_reading(data: dict):
             fault_component,
             evidence_temporal,
             evidence_spatial,
-            evidence_multivariate
+            evidence_multivariate,
+            source
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         data["station_id"],
         data["timestamp"],
@@ -74,7 +88,8 @@ def insert_reading(data: dict):
         data["fault_component"],
         data["evidence"]["temporal"],
         data["evidence"]["spatial"],
-        data["evidence"]["multivariate"]
+        data["evidence"]["multivariate"],
+        source,
     ))
 
     conn.commit()
@@ -83,11 +98,12 @@ def insert_reading(data: dict):
 
 def get_latest_per_station():
     """
-    Returns the latest stored telemetry result for every AWS station.
+    Returns the latest LIVE telemetry result for every station.
 
-    This intentionally uses the latest database record and is independent
-    of the active-alert time window.
+    Historical benchmark data and Demo Center results are deliberately
+    excluded from the live station state.
     """
+
     conn = get_connection()
     cur = conn.cursor()
 
@@ -97,10 +113,12 @@ def get_latest_per_station():
         INNER JOIN (
             SELECT station_id, MAX(id) AS max_id
             FROM readings
+            WHERE source = 'live'
             GROUP BY station_id
         ) latest
         ON r.station_id = latest.station_id
         AND r.id = latest.max_id
+        WHERE r.source = 'live'
     """)
 
     columns = [desc[0] for desc in cur.description]
@@ -112,29 +130,23 @@ def get_latest_per_station():
 
 def get_recent_alerts(limit=50):
     """
-    Returns ONLY currently active/recent anomaly records.
+    Returns only LIVE anomaly records.
 
-    Historical benchmark anomalies remain in the database, but they are
-    not treated as active alerts once they are older than the configured
-    live-alert window.
+    Historical benchmark anomalies and Demo Center results do not
+    appear as active live alerts.
     """
+
     conn = get_connection()
     cur = conn.cursor()
 
     cur.execute("""
         SELECT *
         FROM readings
-        WHERE anomaly = 1
-          AND datetime(timestamp) >= datetime(
-              'now',
-              ?
-          )
+        WHERE source = 'live'
+          AND anomaly = 1
         ORDER BY id DESC
         LIMIT ?
-    """, (
-        f"-{ACTIVE_ALERT_WINDOW_MINUTES} minutes",
-        limit
-    ))
+    """, (limit,))
 
     columns = [desc[0] for desc in cur.description]
     rows = [dict(zip(columns, row)) for row in cur.fetchall()]
@@ -145,12 +157,12 @@ def get_recent_alerts(limit=50):
 
 def get_station_history(station_id, limit=50):
     """
-    Returns historical readings for a station.
+    Returns ONLY LIVE telemetry for the live dashboard graph.
 
-    This is deliberately NOT restricted by the active-alert window because
-    the frontend uses this endpoint for the 1h / 6h / 24h / 7d telemetry
-    graphs.
+    Historical benchmark telemetry remains safely stored in the
+    database, but is not mixed into the live graph.
     """
+
     conn = get_connection()
     cur = conn.cursor()
 
@@ -158,11 +170,12 @@ def get_station_history(station_id, limit=50):
         SELECT *
         FROM readings
         WHERE station_id = ?
-        ORDER BY id DESC
+          AND source = 'live'
+        ORDER BY datetime(timestamp) ASC, id ASC
         LIMIT ?
     """, (
         station_id,
-        limit
+        limit,
     ))
 
     columns = [desc[0] for desc in cur.description]
@@ -175,11 +188,8 @@ def get_station_history(station_id, limit=50):
 def reset_database():
     """
     Full database reset.
-
-    WARNING:
-    This clears benchmark history as well as live data.
-    Use presentation_reset.py instead when preparing for the demo.
     """
+
     conn = get_connection()
     cur = conn.cursor()
 

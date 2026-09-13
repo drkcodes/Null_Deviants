@@ -424,9 +424,10 @@ for index, row in enumerate(selected, start=1):
                 fault_component,
                 evidence_temporal,
                 evidence_spatial,
-                evidence_multivariate
+                evidence_multivariate,
+                source
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'demo')
             """,
             (
                 str(row["station_id"]),

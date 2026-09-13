@@ -44,7 +44,7 @@ print()
 
 cursor.execute("""
     DELETE FROM readings
-    WHERE timestamp >= '2026-01-01 00:00:00'
+    WHERE source = 'live'
 """)
 
 deleted = cursor.rowcount
@@ -58,7 +58,8 @@ after_total = cursor.fetchone()[0]
 cursor.execute("""
     SELECT COUNT(*)
     FROM readings
-    WHERE anomaly = 1
+    WHERE source = 'live'
+      AND anomaly = 1
 """)
 after_anomalies = cursor.fetchone()[0]
 
