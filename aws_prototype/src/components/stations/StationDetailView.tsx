@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Station, StationSensorHealth, AnomalyRecord, TelemetryPoint } from '../../types';
+import { Station, StationSensorHealth, AnomalyRecord, TelemetryPoint, MaintenanceRiskResult } from '../../types';
 import { stationService } from '../../lib/api/stationService';
 import { StatusBadge, CauseBadge, SeverityBadge, ChannelBadge } from '../common/Badges';
 import { TelemetryChart } from '../charts/TelemetryChart';
@@ -14,6 +14,10 @@ import {
   Compass,
   Radio,
   ArrowRight,
+  BrainCircuit,
+  Clock3,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 
 interface StationDetailViewProps {
@@ -34,6 +38,7 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
   const [allStations, setAllStations] = useState<Station[]>([]);
   const [anomalies, setAnomalies] = useState<AnomalyRecord[]>([]);
   const [timeSeries, setTimeSeries] = useState<TelemetryPoint[]>([]);
+  const [maintenanceRisk, setMaintenanceRisk] = useState<MaintenanceRiskResult | null>(null);
   const [timeRange, setTimeRange] = useState<'1h' | '6h' | '24h' | '7d'>('24h');
   const [loading, setLoading] = useState(true);
 
@@ -45,6 +50,7 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
         const h = await stationService.getStationSensorHealth(stationId).catch(() => undefined);
         const all = await stationService.getStations().catch(() => []);
         const anos = await stationService.getAnomalies({ search: stationId }).catch(() => []);
+        const risk = await stationService.getStationMaintenanceRisk(stationId).catch(() => null);
         const ts = await stationService.getTimeSeries(
           stationId,
           timeRange === '1h' ? 1 : timeRange === '6h' ? 6 : timeRange === '7d' ? 168 : 24,
@@ -59,6 +65,7 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
         setAllStations(all || []);
         setAnomalies(anos || []);
         setTimeSeries(ts || []);
+        setMaintenanceRisk(risk);
       } catch (err) {
         console.error('Error loading station detail:', err);
       } finally {
@@ -290,7 +297,62 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
         </div>
       )}
 
-      {/* 3. Historical Telemetry Chart */}
+      {/* 3. Predictive Maintenance Risk */}
+      {maintenanceRisk && (
+        <div className="apple-glass-card rounded-2xl p-6 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+          <div className="flex items-start justify-between gap-4 pb-3 border-b border-slate-200/50">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                <BrainCircuit className="w-4 h-4 text-blue-600" /> Predictive Maintenance Risk
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">Deterministic prioritization from the Phase 8 maintenance-risk engine.</p>
+            </div>
+            <span className="text-[10px] font-mono text-slate-400">{maintenanceRisk.engine_version}</span>
+          </div>
+          {maintenanceRisk.maintenance_risk === null ? (
+            <div className="py-5 text-xs text-slate-500">Insufficient telemetry history for maintenance prioritization.</div>
+          ) : (
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-slate-200/60 bg-white/70 p-4">
+                <div className="text-[10px] uppercase tracking-wider text-slate-400">Risk</div>
+                <div className="mt-1 text-2xl font-bold font-mono text-slate-900">{maintenanceRisk.maintenance_risk}/100</div>
+                <div className="text-[11px] text-slate-500 mt-1">{maintenanceRisk.priority}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200/60 bg-white/70 p-4">
+                <div className="text-[10px] uppercase tracking-wider text-slate-400">Confidence</div>
+                <div className="mt-1 text-lg font-semibold capitalize text-slate-900">{maintenanceRisk.confidence}</div>
+                <div className="text-[11px] text-slate-500 mt-1">{maintenanceRisk.data_sufficiency.samples_used} samples</div>
+              </div>
+              <div className="rounded-xl border border-slate-200/60 bg-white/70 p-4">
+                <div className="text-[10px] uppercase tracking-wider text-slate-400">Trajectory</div>
+                <div className="mt-1 flex items-center gap-2 text-lg font-semibold capitalize text-slate-900">
+                  {maintenanceRisk.trajectory?.direction === 'worsening' ? <TrendingUp className="w-4 h-4 text-rose-600" /> : <TrendingDown className="w-4 h-4 text-emerald-600" />}
+                  {maintenanceRisk.trajectory?.direction || 'unknown'}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1">Δ {maintenanceRisk.trajectory?.delta_risk ?? '—'}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200/60 bg-white/70 p-4">
+                <div className="text-[10px] uppercase tracking-wider text-slate-400">Recommended Action</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">{maintenanceRisk.recommended_action}</div>
+                <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1"><Clock3 className="w-3 h-3" /> {maintenanceRisk.attention_horizon !== null ? `${maintenanceRisk.attention_horizon.toFixed(1)}h horizon` : 'No attention horizon'}</div>
+              </div>
+            </div>
+          )}
+          {maintenanceRisk.drivers.length > 0 && (
+            <div className="mt-4 rounded-xl border border-slate-200/60 bg-slate-50/60 p-4">
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 mb-2">Why this station is ranked here</div>
+              <ul className="space-y-1.5 text-[11px] text-slate-600 list-disc pl-4">
+                {maintenanceRisk.drivers.slice(0, 5).map((driver) => <li key={driver}>{driver}</li>)}
+              </ul>
+            </div>
+          )}
+          {maintenanceRisk.attention_horizon !== null && (
+            <p className="mt-3 text-[10px] text-slate-400">Trend estimate only; not a failure forecast or remaining useful life.</p>
+          )}
+        </div>
+      )}
+
+      {/* 4. Historical Telemetry Chart */}
       <TelemetryChart
         data={timeSeries}
         stationName={station.name}

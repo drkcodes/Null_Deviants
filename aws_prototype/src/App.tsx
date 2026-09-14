@@ -11,6 +11,7 @@ import {
   ModelStatusInfo,
   SimulationScenario,
   TelemetryPoint,
+  MaintenanceRiskResult,
 } from './types';
 import { stationService } from './lib/api/stationService';
 import { Sidebar } from './components/layout/Sidebar';
@@ -60,6 +61,8 @@ export default function App() {
     useState<SimulationScenario[]>([]);
   const [timeSeries, setTimeSeries] =
     useState<TelemetryPoint[]>([]);
+  const [maintenanceRisk, setMaintenanceRisk] =
+    useState<MaintenanceRiskResult[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +97,7 @@ export default function App() {
         qual,
         model,
         scen,
+        maintenanceFleet,
       ] = await Promise.all([
         stationService.getStations(),
         stationService.getNetworkSummary(),
@@ -104,6 +108,7 @@ export default function App() {
         stationService.getDataQuality(),
         stationService.getModelStatus(),
         stationService.getSimulationScenarios(),
+        stationService.getMaintenanceRiskFleet(),
       ]);
 
       setStations(stList);
@@ -115,6 +120,7 @@ export default function App() {
       setDataQuality(qual);
       setModelStatus(model);
       setScenarios(scen);
+      setMaintenanceRisk(maintenanceFleet.stations || []);
 
       const targetId = stList.some(
         (station) => station.id === selectedStationId,
@@ -128,6 +134,7 @@ export default function App() {
 
       const ts = await stationService.getTimeSeries(targetId, 24);
       setTimeSeries(ts);
+      setMaintenanceRisk(maintenanceFleet.stations || []);
     } catch (err: any) {
       console.error(
         'Failed to reach SkyGuardAI backend:',
@@ -167,6 +174,7 @@ export default function App() {
         act,
         qual,
         ts,
+        maintenanceFleet,
       ] = await Promise.all([
         stationService.getStations(),
         stationService.getNetworkSummary(),
@@ -181,6 +189,7 @@ export default function App() {
               24,
             )
           : Promise.resolve([]),
+        stationService.getMaintenanceRiskFleet(),
       ]);
 
       /*
@@ -510,6 +519,7 @@ export default function App() {
                 onViewStationDetails={
                   handleViewStationDetails
                 }
+                maintenanceRisk={maintenanceRisk}
               />
             </>
           )}

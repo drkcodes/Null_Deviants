@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Station, NetworkSummary } from '../../types';
+import { Station, NetworkSummary, MaintenanceRiskResult } from '../../types';
 import { AndhraPradeshMap } from '../maps/AndhraPradeshMap';
 import { StationTable } from '../stations/StationTable';
 import { MetricCard } from '../common/MetricCard';
 import { Radio, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { MaintenanceRiskView } from './MaintenanceRiskView';
 
 interface NetworkViewProps {
   stations: Station[];
@@ -11,6 +12,7 @@ interface NetworkViewProps {
   selectedStationId: string;
   onSelectStation: (id: string) => void;
   onViewStationDetails: (id: string) => void;
+  maintenanceRisk: MaintenanceRiskResult[];
 }
 
 export const NetworkView: React.FC<NetworkViewProps> = ({
@@ -19,6 +21,7 @@ export const NetworkView: React.FC<NetworkViewProps> = ({
   selectedStationId,
   onSelectStation,
   onViewStationDetails,
+  maintenanceRisk,
 }) => {
   return (
     <div className="space-y-6">
@@ -53,6 +56,8 @@ export const NetworkView: React.FC<NetworkViewProps> = ({
           indicatorColor={summary.criticalCount !== null ? 'rose' : 'slate'}
         />
       </div>
+
+      <MaintenanceRiskView results={maintenanceRisk} onViewStation={onViewStationDetails} />
 
       {/* Map & Station Table Layout */}
       <div className="space-y-5">

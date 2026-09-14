@@ -16,6 +16,8 @@ import {
   AnomalyFaultType,
   ChannelStatus,
   Region,
+  MaintenanceRiskResult,
+  MaintenanceRiskFleet,
 } from '../../types';
 
 /** SkyGuardAI FastAPI backend base URL. */
@@ -766,6 +768,19 @@ class StationService {
     return await response.json();
 }
 
+
+  /** Fetches deterministic Phase 8 maintenance-risk ranking for the full fleet. */
+  async getMaintenanceRiskFleet(): Promise<MaintenanceRiskFleet> {
+    return apiFetch<MaintenanceRiskFleet>('/stations/maintenance-risk');
+  }
+
+  /** Fetches deterministic Phase 8 maintenance risk for one station. */
+  async getStationMaintenanceRisk(stationId: string): Promise<MaintenanceRiskResult> {
+    const backendId = toBackendStationId(stationId);
+    return apiFetch<MaintenanceRiskResult>(
+      `/station/${encodeURIComponent(backendId)}/maintenance-risk`,
+    );
+  }
 
   async getSimulationScenarios(): Promise<SimulationScenario[]> {
   return [

@@ -23,6 +23,55 @@ export type AnomalyFaultType =
 
 export type ChannelStatus = 'Normal' | 'Degraded' | 'Suspected fault' | 'Awaiting data';
 
+export type MaintenancePriority = 'Monitor' | 'Attention' | 'Elevated' | 'Priority' | 'Insufficient Data';
+export type MaintenanceConfidence = 'none' | 'low' | 'medium' | 'high';
+export type MaintenanceTrajectory = 'worsening' | 'improving' | 'stable' | 'unknown';
+
+export interface MaintenanceRiskGroups {
+  A_progressive_calibration: number;
+  B_hard_fault: number;
+  C_isolation: number;
+  D_sensor_burden_7d: number;
+  E_communications_data: number;
+}
+
+export interface MaintenanceRiskResult {
+  station_id: string;
+  maintenance_risk: number | null;
+  priority: MaintenancePriority;
+  confidence: MaintenanceConfidence;
+  action_queue: string;
+  recommended_action: string;
+  drivers: string[];
+  groups: MaintenanceRiskGroups;
+  sensor_anomaly_count_7d: number;
+  weather_suppression_applied: boolean;
+  engine_version: string;
+  trajectory?: {
+    status: string;
+    direction: MaintenanceTrajectory;
+    delta_risk: number | null;
+    slope_per_hour: number | null;
+    reference_window: string | null;
+    elevated_duration: string | null;
+    recovery_detected: boolean;
+  };
+  attention_horizon: number | null;
+  data_sufficiency: {
+    status: 'high' | 'medium' | 'low' | 'insufficient';
+    samples_used: number;
+  };
+  priority_rank: number | null;
+}
+
+export interface MaintenanceRiskFleet {
+  stations: MaintenanceRiskResult[];
+  station_count: number;
+  ranked_count: number;
+  insufficient_count: number;
+  index_definition: string;
+}
+
 export interface Station {
   id: string; // display ID e.g. 'AWS-AP-01'
   backendId?: string; // backend authoritative ID e.g. 'AWS_AP01'
