@@ -13,8 +13,7 @@ import {
   TelemetryPoint,
   MaintenanceRiskResult,
 } from './types';
-import { stationService } from './lib/api/stationService';
-import { Sidebar } from './components/layout/Sidebar';
+import { API_BASE_URL, stationService } from './lib/api/stationService';import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { PageHeader } from './components/common/PageHeader';
 import { AlertCircle, RefreshCw } from 'lucide-react';
@@ -383,7 +382,7 @@ export default function App() {
               Backend Endpoint
             </div>
 
-            http://127.0.0.1:8000
+            {API_BASE_URL}
           </div>
 
           <button
