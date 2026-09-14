@@ -26,6 +26,12 @@ from feature_engineering import (
     build_model_row,
 )
 
+from maintenance_risk import (
+    risk_from_health,
+    attach_trajectory_and_horizon,
+    rank_maintenance_results,
+)
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
@@ -3586,6 +3592,280 @@ def stations_health():
         "station_count": len(results),
     }
 
+def _maintenance_health_anchor(
+    station_id,
+    history_rows,
+    anomaly_rows,
+    target_timestamp,
+    contexts_by_timestamp,
+    previous_contexts_by_timestamp,
+):
+    target = _health_timestamp(target_timestamp)
+    if target is None:
+        return None
+
+    eligible = []
+    for row in history_rows or []:
+        timestamp = _health_timestamp(row.get("timestamp"))
+        if timestamp is not None and timestamp <= target:
+            eligible.append(row)
+
+    if not eligible:
+        return None
+
+    latest = max(
+        eligible,
+        key=lambda row: _health_timestamp(row.get("timestamp"))
+        or pd.Timestamp.min.tz_localize("Asia/Kolkata"),
+    )
+
+    actual_timestamp = _health_timestamp(latest.get("timestamp"))
+    if actual_timestamp is None:
+        return None
+
+    current_context = contexts_by_timestamp.get(actual_timestamp, [])
+
+    previous_context = previous_contexts_by_timestamp.get(
+        actual_timestamp - pd.Timedelta(minutes=15),
+        [],
+    )
+
+    return _calculate_station_health(
+        station_id,
+        eligible,
+        anomaly_rows,
+        current_context=current_context,
+        previous_context=previous_context,
+        now=actual_timestamp,
+    )
+
+def _build_maintenance_risk_results():
+    station_ids = stations_df["station_id"].astype(str).tolist()
+
+    history_rows = get_station_feature_history_batch(
+        station_ids,
+        limit=672,
+    )
+    anomaly_rows = get_live_anomaly_history(station_ids)
+
+    histories_by_station = {station_id: [] for station_id in station_ids}
+    for row in history_rows:
+        histories_by_station.setdefault(
+            str(row["station_id"]),
+            [],
+        ).append(row)
+
+    anomalies_by_station = {station_id: [] for station_id in station_ids}
+    for row in anomaly_rows:
+        anomalies_by_station.setdefault(
+            str(row["station_id"]),
+            [],
+        ).append(row)
+
+    # Build fleet-wide contexts for every timestamp already present
+    # in the fetched seven-day history. No extra database queries
+    # are needed for the sparse anchors.
+    contexts_by_timestamp = {}
+    previous_contexts_by_timestamp = {}
+
+    for row in history_rows:
+        timestamp = _health_timestamp(row.get("timestamp"))
+        if timestamp is None:
+            continue
+
+        context_row = {
+            "station_id": row.get("station_id"),
+            "timestamp": timestamp,
+            "temperature_c": row.get("temperature_c"),
+            "relative_humidity_pct": row.get("relative_humidity_pct"),
+            "pressure_hpa": row.get("pressure_hpa"),
+        }
+
+        contexts_by_timestamp.setdefault(
+            timestamp,
+            [],
+        ).append(context_row)
+
+        previous_contexts_by_timestamp.setdefault(
+            timestamp,
+            [],
+        ).append(context_row)
+
+    current_results = []
+
+    for station_id in station_ids:
+        rows = histories_by_station.get(station_id, [])
+        anomalies = anomalies_by_station.get(station_id, [])
+
+        if not rows:
+            health = _calculate_station_health(
+                station_id,
+                [],
+                anomalies,
+            )
+            current_results.append(
+                risk_from_health(
+                    health,
+                    anomalies,
+                    pd.Timestamp.now(tz="Asia/Kolkata"),
+                )
+                | {
+                    "station_id": station_id,
+                    "trajectory": {
+                        "status": "unknown",
+                        "direction": "unknown",
+                        "delta_risk": None,
+                        "slope_per_hour": None,
+                        "reference_window": None,
+                        "elevated_duration": None,
+                        "recovery_detected": False,
+                    },
+                    "attention_horizon": None,
+                    "data_sufficiency": health.get("data_sufficiency"),
+                }
+            )
+            continue
+
+        latest_timestamp = max(
+            (
+                _health_timestamp(row.get("timestamp"))
+                for row in rows
+                if _health_timestamp(row.get("timestamp")) is not None
+            ),
+            default=None,
+        )
+
+        if latest_timestamp is None:
+            health = _calculate_station_health(
+                station_id,
+                [],
+                anomalies,
+            )
+            current_results.append(
+                risk_from_health(
+                    health,
+                    anomalies,
+                    pd.Timestamp.now(tz="Asia/Kolkata"),
+                )
+                | {
+                    "station_id": station_id,
+                    "trajectory": {
+                        "status": "unknown",
+                        "direction": "unknown",
+                        "delta_risk": None,
+                        "slope_per_hour": None,
+                        "reference_window": None,
+                        "elevated_duration": None,
+                        "recovery_detected": False,
+                    },
+                    "attention_horizon": None,
+                    "data_sufficiency": health.get("data_sufficiency"),
+                }
+            )
+            continue
+
+        current_health = _calculate_station_health(
+            station_id,
+            rows,
+            anomalies,
+            current_context=contexts_by_timestamp.get(
+                latest_timestamp,
+                [],
+            ),
+            previous_context=previous_contexts_by_timestamp.get(
+                latest_timestamp - pd.Timedelta(minutes=15),
+                [],
+            ),
+            now=latest_timestamp,
+        )
+
+        current_risk = risk_from_health(
+            current_health,
+            anomalies,
+            latest_timestamp,
+        )
+
+        anchors = {}
+
+        for label, offset in (
+            ("6h", pd.Timedelta(hours=6)),
+            ("24h", pd.Timedelta(hours=24)),
+            ("7d", pd.Timedelta(days=7)),
+        ):
+            anchor_health = _maintenance_health_anchor(
+                station_id,
+                rows,
+                anomalies,
+                latest_timestamp - offset,
+                contexts_by_timestamp,
+                previous_contexts_by_timestamp,
+            )
+
+            if anchor_health is not None:
+                anchors[label] = risk_from_health(
+                    anchor_health,
+                    anomalies,
+                    _health_timestamp(anchor_health.get("timestamp")),
+                )
+            else:
+                anchors[label] = None
+
+        result = attach_trajectory_and_horizon(
+            current_risk,
+            anchors,
+        )
+
+        result["station_id"] = station_id
+        result["data_sufficiency"] = current_health.get(
+            "data_sufficiency"
+        )
+
+        current_results.append(result)
+
+    return rank_maintenance_results(current_results)
+
+@app.get("/stations/maintenance-risk")
+def stations_maintenance_risk():
+    results = _build_maintenance_risk_results()
+
+    ranked_count = sum(
+        result.get("maintenance_risk") is not None
+        and result.get("confidence") != "none"
+        for result in results
+    )
+
+    insufficient_count = len(results) - ranked_count
+
+    return {
+        "stations": results,
+        "station_count": len(results),
+        "ranked_count": ranked_count,
+        "insufficient_count": insufficient_count,
+        "index_definition": "deterministic_maintenance_risk_v1",
+    }
+
+@app.get("/station/{station_id}/maintenance-risk")
+def station_maintenance_risk(station_id: str):
+    known_station_ids = set(
+        stations_df["station_id"].astype(str)
+    )
+
+    if station_id not in known_station_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown station: {station_id}",
+        )
+
+    results = _build_maintenance_risk_results()
+
+    for result in results:
+        if str(result.get("station_id")) == station_id:
+            return result
+
+    raise HTTPException(
+        status_code=404,
+        detail=f"Maintenance-risk result unavailable for station: {station_id}",
+    )
 
 @app.get("/station/{station_id}/explain")
 def explain_station_anomaly(
