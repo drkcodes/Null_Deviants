@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DataQualityMetrics, ModelStatusInfo } from '../../types';
+import { stationService } from '../../lib/api/stationService';
 import {
   Database,
   Cpu,
@@ -34,6 +35,23 @@ export const DataMonitoringView: React.FC<DataMonitoringViewProps> = ({
   modelStatus,
 }) => {
   const q = quality;
+  const [liveModelStatus, setLiveModelStatus] = useState<ModelStatusInfo>(modelStatus);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    stationService.getModelStatus().then((status) => {
+      if (isMounted) {
+        setLiveModelStatus(status);
+      }
+    }).catch(() => {
+      // Keep the already-loaded status when the refresh is unavailable.
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const [selectedFeatureGroup, setSelectedFeatureGroup] = useState<string>(
     FEATURE_GROUPS && FEATURE_GROUPS[0] ? FEATURE_GROUPS[0].name : 'Raw Telemetry',
@@ -164,18 +182,14 @@ export const DataMonitoringView: React.FC<DataMonitoringViewProps> = ({
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                 <div className="p-2.5 bg-slate-50/70 rounded-lg border border-slate-100">
                   <span className="text-[10px] uppercase text-slate-400 font-medium">Accuracy</span>
-                  <div className="text-lg font-mono font-semibold text-slate-900 mt-0.5">95.88%</div>
+                  <div className="text-lg font-mono font-semibold text-slate-900 mt-0.5">{liveModelStatus.stage1.accuracy}</div>
                   <div className="text-[10px] text-slate-500">Holdout validation</div>
                 </div>
                 <div className="p-2.5 bg-slate-50/70 rounded-lg border border-slate-100">
                   <span className="text-[10px] uppercase text-slate-400 font-medium">Anomaly F1 Score</span>
-                  <div className="text-lg font-mono font-semibold text-blue-600 mt-0.5">75.37%</div>
-                  <div className="text-[10px] text-slate-500">Prec 71.07% · Rec 80.23%</div>
+                  <div className="text-lg font-mono font-semibold text-blue-600 mt-0.5">{liveModelStatus.stage1.f1Score}</div>
                 </div>
               </div>
-            </div>
-            <div className="mt-3 pt-2 border-t border-slate-100 text-[11px] text-slate-500">
-              Evaluated on a chronological holdout from Nov 1–Dec 31, 2025 (117,120 test observations; 9,204 actual anomalies).
             </div>
           </div>
 
@@ -199,23 +213,20 @@ export const DataMonitoringView: React.FC<DataMonitoringViewProps> = ({
               <div className="mt-3 grid grid-cols-3 gap-2.5 text-xs">
                 <div className="p-2.5 bg-slate-50/70 rounded-lg border border-slate-100">
                   <span className="text-[10px] uppercase text-slate-400 font-medium">Accuracy</span>
-                  <div className="text-lg font-mono font-semibold text-slate-900 mt-0.5">93.49%</div>
+                  <div className="text-lg font-mono font-semibold text-slate-900 mt-0.5">{liveModelStatus.stage2.accuracy}</div>
                   <div className="text-[10px] text-slate-500">Multivariate</div>
                 </div>
                 <div className="p-2.5 bg-slate-50/70 rounded-lg border border-slate-100">
                   <span className="text-[10px] uppercase text-slate-400 font-medium">Sensor F1</span>
-                  <div className="text-lg font-mono font-semibold text-amber-800 mt-0.5">86%</div>
+                  <div className="text-lg font-mono font-semibold text-amber-800 mt-0.5">{liveModelStatus.stage2.f1Score}</div>
                   <div className="text-[10px] text-slate-500">Isolated drift</div>
                 </div>
                 <div className="p-2.5 bg-slate-50/70 rounded-lg border border-slate-100">
                   <span className="text-[10px] uppercase text-slate-400 font-medium">Weather F1</span>
-                  <div className="text-lg font-mono font-semibold text-sky-700 mt-0.5">96%</div>
+                  <div className="text-lg font-mono font-semibold text-sky-700 mt-0.5">{liveModelStatus.stage2.f1Score}</div>
                   <div className="text-[10px] text-slate-500">Spatial sync</div>
                 </div>
               </div>
-            </div>
-            <div className="mt-3 pt-2 border-t border-slate-100 text-[11px] text-slate-500">
-              Evaluated on anomalies identified within the held-out test period (9,204 anomaly observations).
             </div>
           </div>
         </div>

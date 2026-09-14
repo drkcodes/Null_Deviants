@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import pandas as pd
 import numpy as np
@@ -2741,6 +2741,196 @@ def health_check():
 # ============================================================
 # STATION DATA
 # ============================================================
+
+@app.get("/model/status")
+def model_status():
+    """Return metadata from the actual loaded ML model artifacts.
+
+    Accuracy and F1 are reported as unavailable because the current
+    backend does not persist a formal evaluation artifact containing
+    those metrics. No fabricated validation numbers are returned.
+    """
+    return {
+        "stage1": {
+            "name": "Stage 1 Anomaly Gatekeeper",
+            "algorithm": "Random Forest Classifier",
+            "status": "Loaded",
+            "version": "model_anomaly_detector.pkl",
+            "featuresCount": int(getattr(model_anomaly, "n_features_in_", 0)),
+            "trainingPeriod": "Synthetic AWS telemetry dataset",
+            "evaluationPeriod": "Not persisted in model artifact",
+            "lastTrained": "Not available from model artifact",
+            "accuracy": "Not available",
+            "f1Score": "Not available",
+        },
+        "stage2": {
+            "name": "Stage 2 Root-Cause Attribution",
+            "algorithm": "Random Forest Classifier",
+            "status": "Loaded",
+            "version": "model_weather_or_sensor.pkl",
+            "featuresCount": int(getattr(model_cause, "n_features_in_", 0)),
+            "trainingPeriod": "Synthetic AWS telemetry dataset",
+            "evaluationPeriod": "Not persisted in model artifact",
+            "lastTrained": "Not available from model artifact",
+            "accuracy": "Not available",
+            "f1Score": "Not available",
+        },
+    }
+
+
+def _baseline_stats(values):
+    """Return median and MAD for finite numeric values."""
+    numeric_values = [
+        float(value)
+        for value in values
+        if value is not None and np.isfinite(value)
+    ]
+
+    if not numeric_values:
+        return {
+            "median": None,
+            "mad": None,
+        }
+
+    median = float(np.median(numeric_values))
+    mad = float(np.median(np.abs(np.asarray(numeric_values) - median)))
+
+    return {
+        "median": median,
+        "mad": mad,
+    }
+
+
+def _baseline_metrics(rows):
+    return {
+        "temperature_c": _baseline_stats(
+            row["temperature_c"] for row in rows
+        ),
+        "relative_humidity_pct": _baseline_stats(
+            row["relative_humidity_pct"] for row in rows
+        ),
+        "pressure_hpa": _baseline_stats(
+            row["pressure_hpa"] for row in rows
+        ),
+    }
+
+
+@app.get("/station/{station_id}/baseline")
+def station_baseline(station_id: str):
+    """Return a read-only robust baseline from same-station telemetry."""
+    known_station_ids = set(
+        stations_df["station_id"].astype(str)
+    )
+
+    if station_id not in known_station_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown station: {station_id}",
+        )
+
+    # Seven days at a 15-minute cadence is the maximum local history used
+    # here. It is a bounded recent baseline, not multi-year climatology.
+    history_rows = get_station_feature_history(
+        station_id,
+        limit=672,
+    )
+
+    usable_rows = []
+    for row in history_rows or []:
+        timestamp = pd.to_datetime(
+            row.get("timestamp"),
+            errors="coerce",
+            utc=True,
+        )
+        if pd.isna(timestamp):
+            continue
+
+        values = {}
+        for field in (
+            "temperature_c",
+            "relative_humidity_pct",
+            "pressure_hpa",
+        ):
+            value = row.get(field)
+            try:
+                values[field] = (
+                    float(value)
+                    if value is not None and np.isfinite(float(value))
+                    else None
+                )
+            except (TypeError, ValueError):
+                values[field] = None
+
+        if any(value is not None for value in values.values()):
+            usable_rows.append(
+                {
+                    **values,
+                    "timestamp": timestamp,
+                }
+            )
+
+    latest_timestamp = (
+        max(row["timestamp"] for row in usable_rows)
+        if usable_rows
+        else None
+    )
+
+    time_of_day_rows = []
+    if latest_timestamp is not None:
+        latest_bucket = (
+            latest_timestamp.hour * 4
+            + latest_timestamp.minute // 15
+        )
+        time_of_day_rows = [
+            row
+            for row in usable_rows
+            if (
+                row["timestamp"].hour * 4
+                + row["timestamp"].minute // 15
+            ) == latest_bucket
+        ]
+
+    sample_count = len(usable_rows)
+    time_of_day_sample_count = len(time_of_day_rows)
+
+    # Quality is deliberately deterministic: high requires 48 usable
+    # observations and 4 same-time-bucket observations; medium requires
+    # 8 usable observations and 2 same-time-bucket observations.
+    if sample_count >= 48 and time_of_day_sample_count >= 4:
+        baseline_quality = "high"
+    elif sample_count >= 8 and time_of_day_sample_count >= 2:
+        baseline_quality = "medium"
+    else:
+        baseline_quality = "insufficient"
+
+    if baseline_quality == "insufficient":
+        explanation = (
+            "Insufficient same-station history for a reliable robust "
+            "baseline; no multi-year seasonal climatology is available."
+        )
+    elif baseline_quality == "medium":
+        explanation = (
+            "Limited same-station history supports a usable robust baseline, "
+            "but it is not a multi-year seasonal climatology."
+        )
+    else:
+        explanation = (
+            "Recent same-station history supports a robust baseline and "
+            "same 15-minute time-of-day comparison; this is not a multi-year "
+            "seasonal climatology."
+        )
+
+    return {
+        "station_id": station_id,
+        "status": "ok",
+        "baseline_quality": baseline_quality,
+        "samples_used": sample_count,
+        "time_of_day_samples": time_of_day_sample_count,
+        "baseline": _baseline_metrics(usable_rows),
+        "time_of_day_baseline": _baseline_metrics(time_of_day_rows),
+        "explanation": explanation,
+    }
+
 
 @app.get("/stations/latest")
 def stations_latest():

@@ -623,33 +623,15 @@ class StationService {
    * Real ML model status info for the two-stage random forest architecture.
    */
   async getModelStatus(): Promise<ModelStatusInfo> {
-    return {
-      stage1: {
-        name: 'Stage 1 Anomaly Gatekeeper',
-        algorithm: 'Random Forest Ensemble Classifier (SIH26073)',
-        status: 'Operational (FastAPI Backend)',
-        version: 'v1.0.0-AP20',
-        featuresCount: 50,
-        trainingPeriod: '2024-2025 Synthetic AP Baseline',
-        evaluationPeriod: '15-min Telemetry Windows',
-        lastTrained: 'June 2025 (Smart India Hackathon)',
-        accuracy: '94.2% (AP validation)',
-        f1Score: '0.92',
-      },
-      stage2: {
-        name: 'Stage 2 Root-Cause Attribution',
-        algorithm: 'Spatial-Temporal Consistency Engine',
-        status: 'Operational (FastAPI Backend)',
-        version: 'v1.0.0-AP20',
-        featuresCount: 50,
-        trainingPeriod: '2024-2025 Synthetic AP Baseline',
-        evaluationPeriod: 'Spatial Neighbour Correlation',
-        lastTrained: 'June 2025 (Smart India Hackathon)',
-        accuracy: '96.1% (AP validation)',
-        f1Score: '0.95',
-      },
-    };
-  }
+    const response = await fetch(`${API_BASE_URL}/model/status`);
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch model status: ${response.status}`);
+    }
+
+    return await response.json();
+}
+
 
   async getSimulationScenarios(): Promise<SimulationScenario[]> {
   return [

@@ -206,9 +206,9 @@ def insert_reading(
                 data["weather_or_sensor"],
                 data.get("confidence"),
                 data["fault_component"],
-                data["evidence"]["temporal"],
-                data["evidence"]["spatial"],
-                data["evidence"]["multivariate"],
+                data.get("evidence", {}).get("temporal"),
+                data.get("evidence", {}).get("spatial"),
+                data.get("evidence", {}).get("multivariate"),
                 source,
             ))
 
