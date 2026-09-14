@@ -85,6 +85,67 @@ export interface BackendObservationRecord {
   evidence_multivariate?: number | null;
 }
 
+interface BackendHealthChannel {
+  score: number | null;
+  status: string;
+  signals: {
+    drift?: number | null;
+    stuck_count?: number | null;
+    missing?: number | null;
+    spatial_deviation?: number | null;
+  };
+}
+
+interface BackendStationHealth {
+  station_id: string;
+  timestamp: string | null;
+  overall: {
+    score: number | null;
+    status: string;
+  };
+  channels: {
+    temperature: BackendHealthChannel;
+    humidity: BackendHealthChannel;
+    pressure: BackendHealthChannel;
+  };
+  drift: {
+    score: number | null;
+    progressive: number | null;
+    directional_consistency: number | null;
+    persistence: number | null;
+    run_length: number;
+  };
+  sensor_fault: {
+    score: number | null;
+    isolation: number | null;
+    frozen: number | null;
+    physical_consistency: number | null;
+  };
+  data_quality: {
+    missing_rate: number | null;
+    timestamp_gap: number | null;
+    observation_age_seconds: number | null;
+  };
+  network: {
+    coherence: number | null;
+    neighbor_agreement: number | null;
+  };
+  anomaly_burden: {
+    anomalies_24h: number;
+    anomalies_7d: number;
+  };
+  explanation: string[];
+  data_sufficiency: {
+    status: 'high' | 'medium' | 'low' | 'insufficient';
+    samples_used: number;
+  };
+}
+
+interface BackendFleetHealth {
+  stations: BackendStationHealth[];
+  station_count: number;
+}
+
 export interface BackendPredictionResponse {
   station_id: string;
   timestamp: string;
@@ -145,6 +206,82 @@ async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> 
 class StationService {
   private cachedStations: Station[] = [];
   private cachedAlerts: AlertRecord[] = [];
+  private fleetHealthRequest: Promise<BackendStationHealth[]> | null = null;
+
+  private mapHealthStatus(status: string): StationStatus {
+    if (status === 'Healthy') return 'Healthy';
+    if (status === 'Watch') return 'Watch';
+    if (status === 'Critical' || status === 'Degraded') return 'Critical';
+    return 'Awaiting Data';
+  }
+
+  private mapStationHealth(
+    health: BackendStationHealth,
+    station?: Station,
+  ): StationSensorHealth {
+    const mapChannelStatus = (status: string): ChannelStatus => {
+      if (status === 'Insufficient Data') return 'Awaiting data';
+      if (status === 'Critical') return 'Suspected fault';
+      if (status === 'Degraded' || status === 'Watch') return 'Degraded';
+      return 'Normal';
+    };
+    const score = health.overall.score;
+    const timestamp = health.timestamp || station?.lastObservationTime || 'Awaiting observation';
+
+    return {
+      stationId: toDisplayStationId(health.station_id),
+      stationName: station?.name || health.station_id,
+      district: station?.district || '',
+      region: station?.region || 'Coastal',
+      overallHealth: score,
+      overallStatus: health.overall.status as StationSensorHealth['overallStatus'],
+      temperatureChannel: mapChannelStatus(health.channels.temperature.status),
+      temperatureScore: health.channels.temperature.score,
+      humidityChannel: mapChannelStatus(health.channels.humidity.status),
+      humidityScore: health.channels.humidity.score,
+      pressureChannel: mapChannelStatus(health.channels.pressure.status),
+      pressureScore: health.channels.pressure.score,
+      missingDataPct: health.data_quality.missing_rate === null
+        ? null
+        : health.data_quality.missing_rate * 100,
+      driftDetected: (health.drift.score ?? 0) >= 0.7,
+      neighbourAgreementPct: health.network.neighbor_agreement === null
+        ? null
+        : health.network.neighbor_agreement * 100,
+      drift: {
+        score: health.drift.score,
+        progressive: health.drift.progressive,
+        directionalConsistency: health.drift.directional_consistency,
+        persistence: health.drift.persistence,
+        runLength: health.drift.run_length,
+      },
+      sensorFault: {
+        score: health.sensor_fault.score,
+        isolation: health.sensor_fault.isolation,
+        frozen: health.sensor_fault.frozen,
+        physicalConsistency: health.sensor_fault.physical_consistency,
+      },
+      dataQuality: {
+        missingRate: health.data_quality.missing_rate,
+        timestampGap: health.data_quality.timestamp_gap,
+        observationAgeSeconds: health.data_quality.observation_age_seconds,
+      },
+      network: {
+        coherence: health.network.coherence,
+        neighborAgreement: health.network.neighbor_agreement,
+      },
+      anomalyBurden: {
+        anomalies24h: health.anomaly_burden.anomalies_24h,
+        anomalies7d: health.anomaly_burden.anomalies_7d,
+      },
+      explanation: health.explanation,
+      dataSufficiency: {
+        status: health.data_sufficiency.status,
+        samplesUsed: health.data_sufficiency.samples_used,
+      },
+      lastEvaluationTime: timestamp,
+    };
+  }
 
   /**
    * Fetches authoritative station metadata from GET /stations and combines with GET /stations/latest.
@@ -174,10 +311,16 @@ class StationService {
       }
     }
 
+    const fleetHealth = await this.getFleetHealth();
+    const healthByStation = new Map(
+      fleetHealth.map((health) => [toBackendStationId(health.station_id), health]),
+    );
+
     const mappedStations: Station[] = backendStations.map((b) => {
       const backendId = toBackendStationId(b.station_id);
       const displayId = toDisplayStationId(b.station_id);
       const obs = obsMap.get(backendId);
+      const health = healthByStation.get(backendId);
 
       const hasValidReading =
         obs !== undefined &&
@@ -190,17 +333,14 @@ class StationService {
       const weatherOrSensor = (obs?.weather_or_sensor?.toLowerCase() === 'weather' ? 'Weather' : 'Sensor') as AnomalyCause;
 
       let status: StationStatus = 'Awaiting Data';
-      let healthScore: number | null = null;
+      let healthScore: number | null = health?.overall.score ?? null;
 
       if (isAnomaly) {
         status = confidence >= 85 || anomalyScore >= 0.8 ? 'Critical' : 'Watch';
-        healthScore = Math.max(30, Math.round((1 - Math.min(anomalyScore, 0.7)) * 100));
       } else if (hasValidReading) {
-        status = 'Healthy';
-        healthScore = 98;
+        status = health ? this.mapHealthStatus(health.overall.status) : 'Awaiting Data';
       } else {
         status = 'Awaiting Data';
-        healthScore = null;
       }
 
       const faultType = (obs?.fault_component
@@ -531,48 +671,42 @@ class StationService {
     };
   }
 
-  /**
-   * Generates station sensor health audits derived from the 20 authoritative stations.
-   */
+  async getFleetHealth(): Promise<BackendStationHealth[]> {
+    if (!this.fleetHealthRequest) {
+      this.fleetHealthRequest = apiFetch<BackendFleetHealth>('/stations/health')
+        .then((response) => response.stations)
+        .finally(() => {
+          this.fleetHealthRequest = null;
+        });
+    }
+    return this.fleetHealthRequest;
+  }
+
+  async getStationHealth(stationId: string): Promise<StationSensorHealth | undefined> {
+    const backendId = toBackendStationId(stationId);
+    const response = await apiFetch<BackendStationHealth>(
+      `/station/${encodeURIComponent(backendId)}/health`,
+    );
+    const station = await this.getStationById(backendId);
+    return this.mapStationHealth(response, station);
+  }
+
   async getSensorHealthList(): Promise<StationSensorHealth[]> {
+    const health = await this.getFleetHealth();
     if (this.cachedStations.length === 0) {
       await this.getStations();
     }
-
-    return this.cachedStations.map((st) => {
-      const isDegraded = st.status === 'Watch' || st.status === 'Critical';
-      const channelStatus: ChannelStatus = !st.hasTelemetry
-        ? 'Awaiting data'
-        : isDegraded
-        ? 'Suspected fault'
-        : 'Normal';
-
-      return {
-        stationId: st.id,
-        stationName: st.name,
-        district: st.district,
-        region: st.region,
-        overallHealth: st.healthScore,
-        temperatureChannel: channelStatus,
-        temperatureScore: st.healthScore ?? 0,
-        humidityChannel: channelStatus,
-        humidityScore: st.healthScore ?? 0,
-        pressureChannel: !st.hasTelemetry ? 'Awaiting data' : 'Normal',
-        pressureScore: st.hasTelemetry ? 99 : 0,
-        missingDataPct: st.hasTelemetry ? 0 : 100,
-        driftDetected: isDegraded,
-        neighbourAgreementPct: st.nearestStationDistanceKm
-          ? Math.max(70, Math.round(100 - st.nearestStationDistanceKm / 4))
-          : 94,
-        lastEvaluationTime: st.lastObservationTime,
-      };
-    });
+    const stationsById = new Map(
+      this.cachedStations.map((station) => [station.backendId || toBackendStationId(station.id), station]),
+    );
+    return health.map((item) => this.mapStationHealth(
+      item,
+      stationsById.get(toBackendStationId(item.station_id)),
+    ));
   }
 
   async getStationSensorHealth(stationId: string): Promise<StationSensorHealth | undefined> {
-    const list = await this.getSensorHealthList();
-    const displayId = toDisplayStationId(stationId);
-    return list.find((h) => h.stationId === displayId);
+    return this.getStationHealth(stationId);
   }
 
   /**

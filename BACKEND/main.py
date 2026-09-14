@@ -3,6 +3,8 @@ from pydantic import BaseModel
 import pandas as pd
 import numpy as np
 import joblib
+import logging
+import shap
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,6 +15,8 @@ from database import (
     get_recent_alerts,
     get_station_history,
     get_station_feature_history,
+    get_station_feature_history_batch,
+    get_live_anomaly_history,
     get_latest_station_context,
     reset_database,
 )
@@ -21,6 +25,8 @@ from feature_engineering import (
     build_features,
     build_model_row,
 )
+
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # INITIALIZATION
@@ -47,6 +53,7 @@ print("Loading models...")
 
 model_anomaly = joblib.load("model_anomaly_detector.pkl")
 model_cause = joblib.load("model_weather_or_sensor.pkl")
+anomaly_explainer = shap.TreeExplainer(model_anomaly)
 
 print("Models loaded successfully!")
 
@@ -1413,17 +1420,102 @@ def _calculate_network_evidence(
 # RUN REAL RANDOM FOREST MODELS
 # ============================================================
 
+def _model_input_row(features: dict):
+    return (
+        pd.DataFrame([features])
+        .reindex(columns=feature_cols)
+        .fillna(0)
+    )
+
+
+_ANOMALY_FEATURE_LABELS = {
+    "temperature_c": "Temperature",
+    "relative_humidity_pct": "Relative humidity",
+    "pressure_hpa": "Pressure",
+    "temperature_lag_15min": "Temperature lag (15 min)",
+    "temperature_lag_1h": "Temperature lag (1 hour)",
+    "temperature_lag_3h": "Temperature lag (3 hours)",
+    "temperature_roc_15min": "Temperature rate of change (15 min)",
+    "temperature_roc_1h": "Temperature rate of change (1 hour)",
+    "humidity_lag_15min": "Humidity lag (15 min)",
+    "humidity_lag_1h": "Humidity lag (1 hour)",
+    "humidity_lag_3h": "Humidity lag (3 hours)",
+    "pressure_lag_15min": "Pressure lag (15 min)",
+    "pressure_lag_1h": "Pressure lag (1 hour)",
+    "pressure_lag_3h": "Pressure lag (3 hours)",
+}
+
+
+def _explain_anomaly_row(row, top_k=8):
+    """Return class-1 SHAP contributions for the exact model input row."""
+    shap_output = anomaly_explainer.shap_values(
+        row,
+        check_additivity=False,
+    )
+
+    if isinstance(shap_output, list):
+        if len(shap_output) <= 1:
+            raise ValueError("SHAP output does not contain anomaly class 1.")
+        class_values = np.asarray(shap_output[1])
+    else:
+        values = np.asarray(shap_output)
+        if values.ndim == 3:
+            if (
+                values.shape[0] != 1
+                or values.shape[1] != len(feature_cols)
+                or values.shape[2] <= 1
+            ):
+                raise ValueError(
+                    f"Unexpected SHAP output shape: {values.shape}"
+                )
+            class_values = values[0, :, 1]
+        elif values.ndim == 2:
+            if values.shape != (1, len(feature_cols)):
+                raise ValueError(
+                    f"Unexpected SHAP output shape: {values.shape}"
+                )
+            class_values = values[0]
+        else:
+            raise ValueError(
+                f"Unexpected SHAP output shape: {values.shape}"
+            )
+
+    class_values = np.asarray(class_values, dtype=float)
+    if class_values.shape != (len(feature_cols),):
+        raise ValueError(
+            f"Unexpected anomaly SHAP vector shape: {class_values.shape}"
+        )
+    if not np.isfinite(class_values).all():
+        raise ValueError("SHAP output contains non-finite values.")
+
+    ranked_indices = np.argsort(-np.abs(class_values))[:top_k]
+    items = []
+    for index in ranked_indices:
+        shap_value = float(class_values[index])
+        feature = feature_cols[index]
+        value = float(row.iloc[0, index])
+        items.append({
+            "feature": feature,
+            "label": _ANOMALY_FEATURE_LABELS.get(feature, feature),
+            "value": value,
+            "shap_value": shap_value,
+            "abs_shap_value": abs(shap_value),
+            "direction": (
+                "increases_anomaly"
+                if shap_value >= 0
+                else "decreases_anomaly"
+            ),
+        })
+    return items
+
+
 def _run_real_models(
     features: dict,
     evidence: dict | None = None,
     station_id=None,
 ) -> dict:
 
-    row = (
-        pd.DataFrame([features])
-        .reindex(columns=feature_cols)
-        .fillna(0)
-    )
+    row = _model_input_row(features)
 
     # --------------------------------------------------------
     # STAGE 1 — existing Random Forest remains primary.
@@ -1785,19 +1877,10 @@ def _normalize_ingest_timestamp(timestamp: str):
     return current_timestamp
 
 
-def _process_live_reading(
+def _build_live_prediction_context(
     reading: RawTelemetry,
     spatial_context: pd.DataFrame | None = None,
 ):
-    """
-    Build the canonical 50-feature vector and run the real
-    two-stage ML pipeline.
-
-    Random Forest remains the primary ML detector. The evidence
-    layer supplements it with explicit temporal, spatial,
-    network-coherence, frozen, missing and physical evidence.
-    """
-
     current_timestamp = _normalize_ingest_timestamp(
         reading.timestamp
     )
@@ -1849,7 +1932,6 @@ def _process_live_reading(
             ]
         )
 
-    # Ensure the current station occurs exactly once.
     all_station_history = all_station_history[
         all_station_history["station_id"].astype(str)
         != str(reading.station_id)
@@ -1884,7 +1966,6 @@ def _process_live_reading(
         all_station_history=all_station_history,
     )
 
-    # Retrieve the exact preceding network snapshot.
     previous_context = _previous_network_context(
         current_timestamp
     )
@@ -1913,6 +1994,27 @@ def _process_live_reading(
             ],
             ignore_index=True,
         ),
+    )
+
+    return current_timestamp, features, evidence
+
+
+def _process_live_reading(
+    reading: RawTelemetry,
+    spatial_context: pd.DataFrame | None = None,
+):
+    """
+    Build the canonical 50-feature vector and run the real
+    two-stage ML pipeline.
+
+    Random Forest remains the primary ML detector. The evidence
+    layer supplements it with explicit temporal, spatial,
+    network-coherence, frozen, missing and physical evidence.
+    """
+
+    current_timestamp, features, evidence = _build_live_prediction_context(
+        reading,
+        spatial_context=spatial_context,
     )
 
     model_result = _run_real_models(
@@ -2815,6 +2917,414 @@ def _baseline_metrics(rows):
     }
 
 
+def _health_clip(value):
+    if value is None:
+        return None
+    return float(max(0.0, min(1.0, float(value))))
+
+
+def _health_score_from_penalty(penalty):
+    if penalty is None:
+        return None
+    return int(round(100.0 * (1.0 - _health_clip(penalty))))
+
+
+def _health_status(score):
+    if score is None:
+        return "Insufficient Data"
+    if score >= 90:
+        return "Healthy"
+    if score >= 75:
+        return "Watch"
+    if score >= 50:
+        return "Degraded"
+    return "Critical"
+
+
+def _health_numeric(value, default=0.0):
+    numeric = _safe_float(value, default)
+    return float(numeric) if numeric is not None else float(default)
+
+
+def _health_timestamp(value):
+    timestamp = pd.to_datetime(value, errors="coerce")
+    if pd.isna(timestamp):
+        return None
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.tz_localize("Asia/Kolkata")
+    return timestamp
+
+
+def _health_channel(
+    current_value,
+    drift,
+    stuck_count,
+    missing,
+    spatial_deviation,
+    physical_penalty=0.0,
+    temporal_context_factor=1.0,
+):
+    """Build a prototype operational channel index, not failure probability."""
+    usable = current_value is not None and not pd.isna(current_value)
+    if not usable:
+        return {
+            "score": None,
+            "status": "Insufficient Data",
+            "signals": {
+                "drift": _health_clip(drift),
+                "stuck_count": int(max(0, round(_health_numeric(stuck_count)))),
+                "missing": 1.0,
+                "spatial_deviation": _health_clip(spatial_deviation),
+            },
+        }
+
+    # The temporal, frozen, and spatial terms are overlap groups. Each
+    # group contributes once, preventing ROC/z-score/stuck signals from
+    # independently double-counting the same physical failure.
+    temporal_penalty = _health_clip(
+        _health_numeric(drift) * temporal_context_factor
+    )
+    frozen_penalty = _health_clip(_health_numeric(stuck_count) / 4.0)
+    spatial_penalty = _health_clip(spatial_deviation)
+    penalty = (
+        0.45 * temporal_penalty
+        + 0.30 * frozen_penalty
+        + 0.15 * spatial_penalty
+        + 0.10 * _health_clip(physical_penalty)
+        + 0.20 * _health_clip(missing)
+    )
+    penalty = min(1.0, penalty)
+    score = _health_score_from_penalty(penalty)
+    return {
+        "score": score,
+        "status": _health_status(score),
+        "signals": {
+            "drift": _health_clip(drift),
+            "stuck_count": int(max(0, round(_health_numeric(stuck_count)))),
+            "missing": _health_clip(missing),
+            "spatial_deviation": _health_clip(spatial_deviation),
+        },
+    }
+
+
+def _health_explanations(
+    channels,
+    drift,
+    sensor_fault,
+    isolation,
+    frozen,
+    physical,
+    missing_rate,
+    timestamp_gap,
+    network_coherence,
+    neighbor_agreement,
+    anomalies_24h,
+    anomalies_7d,
+):
+    explanations = []
+    channel_names = {
+        "temperature": "Temperature",
+        "humidity": "Humidity",
+        "pressure": "Pressure",
+    }
+    for name, channel in channels.items():
+        if channel["status"] in {"Degraded", "Critical", "Watch"}:
+            signal = channel["signals"]
+            if signal["stuck_count"] >= 2:
+                explanations.append(
+                    f"{channel_names[name]} channel shows repeated identical readings."
+                )
+            elif signal["drift"] >= 0.70:
+                explanations.append(
+                    f"{channel_names[name]} channel shows elevated recent drift."
+                )
+            elif signal["spatial_deviation"] >= 0.50:
+                explanations.append(
+                    f"{channel_names[name]} channel differs from its contemporaneous neighbor."
+                )
+    if frozen >= 0.70:
+        explanations.append("Sensor history shows strong frozen/stuck evidence.")
+    if isolation >= 0.50:
+        explanations.append("Telemetry is isolated from contemporaneous neighbor movement.")
+    if physical >= 1.0:
+        explanations.append("Telemetry contains a physical-consistency violation.")
+    if missing_rate > 0:
+        explanations.append("Recent telemetry contains missing channel values.")
+    if timestamp_gap > 0:
+        explanations.append("Recent telemetry contains timestamp gaps.")
+    if network_coherence >= 0.70 and sensor_fault < 0.70:
+        explanations.append(
+            "Strong network coherence provides regional context and reduces evidence of isolated hardware fault."
+        )
+    elif neighbor_agreement >= 0.70:
+        explanations.append("Telemetry agrees with the contemporaneous neighbor.")
+    if anomalies_24h > 0:
+        explanations.append(
+            f"{anomalies_24h} persisted live anomaly record(s) occurred in the last 24 hours."
+        )
+    elif anomalies_7d > 0:
+        explanations.append(
+            f"{anomalies_7d} persisted live anomaly record(s) occurred in the last 7 days."
+        )
+    return explanations[:5]
+
+
+def _calculate_station_health(
+    station_id,
+    history_rows,
+    anomaly_rows,
+    current_context=None,
+    previous_context=None,
+    now=None,
+):
+    history = pd.DataFrame(history_rows or [])
+    if history.empty:
+        return {
+            "station_id": station_id,
+            "timestamp": None,
+            "overall": {"score": None, "status": "Insufficient Data"},
+            "channels": {
+                name: {"score": None, "status": "Insufficient Data", "signals": {}}
+                for name in ("temperature", "humidity", "pressure")
+            },
+            "drift": {
+                "score": None,
+                "progressive": None,
+                "directional_consistency": None,
+                "persistence": None,
+                "run_length": 0,
+            },
+            "sensor_fault": {
+                "score": None,
+                "isolation": None,
+                "frozen": None,
+                "physical_consistency": None,
+            },
+            "data_quality": {
+                "missing_rate": None,
+                "timestamp_gap": None,
+                "observation_age_seconds": None,
+            },
+            "network": {"coherence": None, "neighbor_agreement": None},
+            "anomaly_burden": {"anomalies_24h": 0, "anomalies_7d": 0},
+            "explanation": ["Insufficient telemetry history for station health."],
+            "data_sufficiency": {"status": "insufficient", "samples_used": 0},
+        }
+
+    now = _health_timestamp(now or pd.Timestamp.now(tz="Asia/Kolkata"))
+    history["timestamp"] = history["timestamp"].map(_health_timestamp)
+    history = history.dropna(subset=["timestamp"]).sort_values("timestamp")
+    latest = history.iloc[-1]
+    usable = history[
+        history[["temperature_c", "relative_humidity_pct", "pressure_hpa"]]
+        .notna()
+        .any(axis=1)
+    ]
+    if usable.empty:
+        return _calculate_station_health(station_id, [], anomaly_rows, now)
+
+    current_timestamp = latest["timestamp"]
+    recent = usable.tail(96)
+    samples_used = len(recent)
+    quality_window = history.tail(96)
+    complete_fields = quality_window[
+        ["temperature_c", "relative_humidity_pct", "pressure_hpa"]
+    ].notna().sum().sum()
+    total_fields = max(1, len(quality_window) * 3)
+    missing_rate = 1.0 - (complete_fields / total_fields)
+    if samples_used >= 96:
+        sufficiency = "high"
+    elif samples_used >= 24:
+        sufficiency = "medium"
+    elif samples_used >= 8:
+        sufficiency = "low"
+    else:
+        sufficiency = "insufficient"
+
+    gaps = quality_window["timestamp"].diff().dt.total_seconds().dropna()
+    timestamp_gap = float(
+        (gaps.sub(900).abs() > 1e-6).any()
+    ) if not gaps.empty else 0.0
+    age_seconds = max(0.0, (now - current_timestamp).total_seconds())
+
+    if current_context is None:
+        current_context = get_latest_station_context(current_timestamp)
+    context = pd.DataFrame(current_context or [])
+    if context.empty:
+        context = history[[
+            "station_id", "timestamp", "temperature_c",
+            "relative_humidity_pct", "pressure_hpa",
+        ]].tail(20)
+
+    reading = RawTelemetry(
+        station_id=station_id,
+        timestamp=current_timestamp.isoformat(),
+        temperature_c=latest.get("temperature_c"),
+        relative_humidity_pct=latest.get("relative_humidity_pct"),
+        pressure_hpa=latest.get("pressure_hpa"),
+    )
+    features = build_features(
+        station_id=station_id,
+        timestamp=current_timestamp,
+        temperature_c=reading.temperature_c,
+        relative_humidity_pct=reading.relative_humidity_pct,
+        pressure_hpa=reading.pressure_hpa,
+        history=recent,
+        all_station_history=context,
+    )
+    evidence = _calculate_network_evidence(
+        station_id=station_id,
+        timestamp=current_timestamp,
+        current_context=context,
+        previous_context=(
+            previous_context
+            if previous_context is not None
+            else _previous_network_context(current_timestamp)
+        ),
+        features=features,
+        station_history=recent,
+    )
+
+    sensor_fault_score = _health_clip(evidence.get("sensor_fault", 0.0))
+    physical = 1.0 if _health_numeric(
+        features.get("physically_implausible_flag"),
+    ) == 1.0 else 0.0
+    isolation = _health_clip(evidence.get("isolation", 0.0))
+    frozen = _health_clip(evidence.get("frozen_sensor", 0.0))
+    coherence = _health_clip(evidence.get("network_coherence", 0.0))
+
+    field_config = {
+        "temperature": ("temperature_c", "temperature_roc_1h", "temperature_stuck_count", "spatial_temp_diff"),
+        "humidity": ("relative_humidity_pct", "humidity_roc_1h", "humidity_stuck_count", "spatial_humidity_diff"),
+        "pressure": ("pressure_hpa", "pressure_roc_1h", "pressure_stuck_count", "spatial_pressure_diff"),
+    }
+    channels = {}
+    for name, (value_key, drift_key, stuck_key, spatial_key) in field_config.items():
+        spatial = _health_numeric(features.get(spatial_key), 0.0)
+        raw_drift = abs(_health_numeric(features.get(drift_key), 0.0)) / {
+            "temperature": 3.0,
+            "humidity": 15.0,
+            "pressure": 5.0,
+        }[name]
+        temporal_context_factor = (
+            1.0
+            if (
+                raw_drift >= 0.70
+                and (
+                    isolation >= 0.75
+                    or _health_numeric(evidence.get("progressive_drift")) >= 0.80
+                )
+            )
+            else 0.0
+        )
+        channels[name] = _health_channel(
+            latest.get(value_key),
+            raw_drift,
+            features.get(stuck_key),
+            1.0 if pd.isna(latest.get(value_key)) else 0.0,
+            min(1.0, abs(spatial) / {"temperature": 5.0, "humidity": 20.0, "pressure": 8.0}[name]),
+            physical_penalty=(
+                1.0
+                if _health_numeric(
+                    features.get("physically_implausible_flag"),
+                ) == 1.0
+                else 0.0
+            ),
+            temporal_context_factor=temporal_context_factor,
+        )
+
+    drift_score = _health_clip(max(
+        evidence.get("drift", 0.0),
+        evidence.get("progressive_drift", 0.0),
+    ))
+    neighbor_agreement = _health_clip(1.0 - isolation)
+
+    valid_scores = [channel["score"] for channel in channels.values() if channel["score"] is not None]
+    health_sensor_fault = (
+        sensor_fault_score
+        if (
+            sensor_fault_score >= 0.75
+            or frozen >= 0.70
+            or physical >= 1.0
+            or _health_numeric(evidence.get("progressive_drift")) >= 0.80
+        )
+        else 0.0
+    )
+    if sufficiency == "insufficient" or not valid_scores:
+        overall_score = None
+    else:
+        overall_penalty = (
+            0.55 * (1.0 - min(valid_scores) / 100.0)
+            + 0.25 * health_sensor_fault
+            + 0.10 * missing_rate
+            + 0.10 * min(1.0, len(anomaly_rows) / 5.0)
+        )
+        # Coherent network movement is context, not a hardware penalty.
+        if coherence >= 0.70 and isolation < 0.50:
+            overall_penalty *= 0.75
+        overall_score = _health_score_from_penalty(overall_penalty)
+
+    cutoff_24h = current_timestamp - pd.Timedelta(hours=24)
+    cutoff_7d = current_timestamp - pd.Timedelta(days=7)
+    anomaly_timestamps = [
+        _health_timestamp(row.get("timestamp"))
+        for row in anomaly_rows
+    ]
+    anomalies_24h = sum(ts is not None and ts >= cutoff_24h for ts in anomaly_timestamps)
+    anomalies_7d = sum(ts is not None and ts >= cutoff_7d for ts in anomaly_timestamps)
+    explanations = _health_explanations(
+        channels,
+        drift_score,
+        sensor_fault_score,
+        isolation,
+        frozen,
+        physical,
+        missing_rate,
+        timestamp_gap,
+        coherence,
+        neighbor_agreement,
+        anomalies_24h,
+        anomalies_7d,
+    )
+    return {
+        "station_id": station_id,
+        "timestamp": current_timestamp.isoformat(),
+        "overall": {"score": overall_score, "status": _health_status(overall_score)},
+        "channels": channels,
+        "drift": {
+            "score": drift_score,
+            "progressive": _health_clip(evidence.get("progressive_drift", 0.0)),
+            "directional_consistency": _health_clip(evidence.get("directional_consistency", 0.0)),
+            "persistence": _health_clip(evidence.get("persistence", 0.0)),
+            "run_length": int(evidence.get("persistence_run_length", 0)),
+        },
+        "sensor_fault": {
+            "score": sensor_fault_score,
+            "isolation": isolation,
+            "frozen": frozen,
+            "physical_consistency": physical,
+        },
+        "data_quality": {
+            "missing_rate": _health_clip(missing_rate),
+            "timestamp_gap": timestamp_gap,
+            "observation_age_seconds": age_seconds,
+        },
+        "network": {
+            "coherence": coherence,
+            "neighbor_agreement": neighbor_agreement,
+        },
+        "anomaly_burden": {
+            "anomalies_24h": int(anomalies_24h),
+            "anomalies_7d": int(anomalies_7d),
+        },
+        "explanation": explanations or ["No elevated health signal was observed."],
+        "data_sufficiency": {
+            "status": sufficiency,
+            "samples_used": int(samples_used),
+        },
+    }
+
+
 @app.get("/station/{station_id}/baseline")
 def station_baseline(station_id: str):
     """Return a read-only robust baseline from same-station telemetry."""
@@ -2967,6 +3477,227 @@ def station_history(
 stations_df = pd.read_csv(
     "stations.csv"
 )
+
+
+@app.get("/station/{station_id}/health")
+def station_health(station_id: str):
+    known_station_ids = set(stations_df["station_id"].astype(str))
+    if station_id not in known_station_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown station: {station_id}",
+        )
+
+    history_rows = get_station_feature_history_batch(
+        [station_id],
+        limit=672,
+    )
+    anomaly_rows = get_live_anomaly_history([station_id])
+    return _calculate_station_health(
+        station_id,
+        history_rows,
+        anomaly_rows,
+    )
+
+
+@app.get("/stations/health")
+def stations_health():
+    station_ids = stations_df["station_id"].astype(str).tolist()
+    history_rows = get_station_feature_history_batch(
+        station_ids,
+        limit=672,
+    )
+    anomaly_rows = get_live_anomaly_history(station_ids)
+
+    histories_by_station = {station_id: [] for station_id in station_ids}
+    for row in history_rows:
+        histories_by_station.setdefault(str(row["station_id"]), []).append(row)
+
+    anomalies_by_station = {station_id: [] for station_id in station_ids}
+    for row in anomaly_rows:
+        anomalies_by_station.setdefault(str(row["station_id"]), []).append(row)
+
+    latest_by_station = {}
+    for station_id, rows in histories_by_station.items():
+        if rows:
+            latest_by_station[station_id] = max(
+                rows,
+                key=lambda row: _health_timestamp(row.get("timestamp"))
+                or pd.Timestamp.min.tz_localize("Asia/Kolkata"),
+            )
+
+    contexts_by_timestamp = {}
+    for station_id, latest in latest_by_station.items():
+        timestamp = _health_timestamp(latest.get("timestamp"))
+        if timestamp is None:
+            continue
+        contexts_by_timestamp.setdefault(timestamp, []).append({
+            "station_id": station_id,
+            "timestamp": timestamp,
+            "temperature_c": latest.get("temperature_c"),
+            "relative_humidity_pct": latest.get("relative_humidity_pct"),
+            "pressure_hpa": latest.get("pressure_hpa"),
+        })
+
+    previous_contexts_by_timestamp = {}
+    for rows in histories_by_station.values():
+        for row in rows:
+            timestamp = _health_timestamp(row.get("timestamp"))
+            if timestamp is None:
+                continue
+            previous_contexts_by_timestamp.setdefault(timestamp, []).append({
+                "station_id": row.get("station_id"),
+                "timestamp": timestamp,
+                "temperature_c": row.get("temperature_c"),
+                "relative_humidity_pct": row.get("relative_humidity_pct"),
+                "pressure_hpa": row.get("pressure_hpa"),
+            })
+
+    results = []
+    for station_id in station_ids:
+        latest = latest_by_station.get(station_id)
+        timestamp = (
+            _health_timestamp(latest.get("timestamp"))
+            if latest is not None
+            else None
+        )
+        results.append(
+            _calculate_station_health(
+                station_id,
+                histories_by_station.get(station_id, []),
+                anomalies_by_station.get(station_id, []),
+                current_context=(
+                    contexts_by_timestamp.get(timestamp)
+                    if timestamp is not None
+                    else []
+                ),
+                previous_context=(
+                    previous_contexts_by_timestamp.get(
+                        timestamp - pd.Timedelta(minutes=15)
+                    )
+                    if timestamp is not None
+                    else []
+                ),
+            )
+        )
+
+    return {
+        "stations": results,
+        "station_count": len(results),
+    }
+
+
+@app.get("/station/{station_id}/explain")
+def explain_station_anomaly(
+    station_id: str,
+    top_k: int = 8,
+):
+    if station_id not in set(stations_df["station_id"].astype(str)):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown station: {station_id}",
+        )
+
+    if top_k < 1 or top_k > 15:
+        raise HTTPException(
+            status_code=422,
+            detail="top_k must be between 1 and 15.",
+        )
+
+    latest_rows = get_latest_per_station()
+    latest_by_station = {
+        str(row.get("station_id")): row
+        for row in latest_rows
+    }
+    latest = latest_by_station.get(station_id)
+
+    if latest is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Insufficient current telemetry for this station.",
+        )
+
+    current_timestamp = _normalize_ingest_timestamp(
+        str(latest.get("timestamp"))
+    )
+    history_rows = get_station_feature_history(
+        station_id=station_id,
+        before_timestamp=current_timestamp,
+        limit=96,
+    )
+    if not history_rows:
+        raise HTTPException(
+            status_code=422,
+            detail="Insufficient station history to build model features.",
+        )
+
+    reading = RawTelemetry(
+        station_id=station_id,
+        timestamp=current_timestamp.isoformat(),
+        temperature_c=latest.get("temperature_c"),
+        relative_humidity_pct=latest.get("relative_humidity_pct"),
+        pressure_hpa=latest.get("pressure_hpa"),
+    )
+    spatial_context = pd.DataFrame([
+        {
+            "station_id": row.get("station_id"),
+            "timestamp": row.get("timestamp"),
+            "temperature_c": row.get("temperature_c"),
+            "relative_humidity_pct": row.get(
+                "relative_humidity_pct"
+            ),
+            "pressure_hpa": row.get("pressure_hpa"),
+        }
+        for row in latest_rows
+    ])
+
+    try:
+        _, features, evidence = _build_live_prediction_context(
+            reading,
+            spatial_context=spatial_context,
+        )
+        row = _model_input_row(features)
+        if not np.isfinite(row.to_numpy(dtype=float)).all():
+            raise ValueError(
+                "Model input contains non-finite values."
+            )
+
+        model_result = _run_real_models(
+            features,
+            evidence=evidence,
+            station_id=station_id,
+        )
+        anomaly_probability = float(
+            model_anomaly.predict_proba(row)[0][1]
+        )
+        top_features = _explain_anomaly_row(
+            row,
+            top_k=top_k,
+        )
+
+        return {
+            "station_id": station_id,
+            "timestamp": current_timestamp.isoformat(),
+            "anomaly": bool(model_result["anomaly"]),
+            "anomaly_probability": anomaly_probability,
+            "feature_count": len(feature_cols),
+            "model": "model_anomaly_detector.pkl",
+            "algorithm": "RandomForestClassifier",
+            "explained_class": 1,
+            "explained_class_label": "anomaly",
+            "top_features": top_features,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "SHAP explanation failed for station %s",
+            station_id,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to generate anomaly explanation.",
+        ) from exc
 
 
 @app.get("/stations")

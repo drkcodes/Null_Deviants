@@ -109,15 +109,47 @@ export interface StationSensorHealth {
   district: string;
   region: Region;
   overallHealth: number | null; // 0 - 100 or null if awaiting data
+  overallStatus: 'Healthy' | 'Watch' | 'Degraded' | 'Critical' | 'Insufficient Data';
   temperatureChannel: ChannelStatus;
-  temperatureScore: number;
+  temperatureScore: number | null;
   humidityChannel: ChannelStatus;
-  humidityScore: number;
+  humidityScore: number | null;
   pressureChannel: ChannelStatus;
-  pressureScore: number;
-  missingDataPct: number;
+  pressureScore: number | null;
+  missingDataPct: number | null;
   driftDetected: boolean;
-  neighbourAgreementPct: number;
+  neighbourAgreementPct: number | null;
+  drift: {
+    score: number | null;
+    progressive: number | null;
+    directionalConsistency: number | null;
+    persistence: number | null;
+    runLength: number;
+  };
+  sensorFault: {
+    score: number | null;
+    isolation: number | null;
+    frozen: number | null;
+    physicalConsistency: number | null;
+  };
+  dataQuality: {
+    missingRate: number | null;
+    timestampGap: number | null;
+    observationAgeSeconds: number | null;
+  };
+  network: {
+    coherence: number | null;
+    neighborAgreement: number | null;
+  };
+  anomalyBurden: {
+    anomalies24h: number;
+    anomalies7d: number;
+  };
+  explanation: string[];
+  dataSufficiency: {
+    status: 'high' | 'medium' | 'low' | 'insufficient';
+    samplesUsed: number;
+  };
   lastEvaluationTime: string;
 }
 

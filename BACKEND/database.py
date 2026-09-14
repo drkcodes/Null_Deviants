@@ -403,6 +403,84 @@ def get_station_feature_history(
             return rows
 
 
+def get_station_feature_history_batch(
+    station_ids,
+    limit=672,
+):
+    """Return bounded raw history for multiple stations in one query."""
+    station_ids = [str(station_id) for station_id in station_ids]
+    if not station_ids:
+        return []
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute("""
+                SELECT
+                    station_id,
+                    timestamp,
+                    temperature_c,
+                    relative_humidity_pct,
+                    pressure_hpa
+                FROM (
+                    SELECT
+                        station_id,
+                        timestamp,
+                        temperature_c,
+                        relative_humidity_pct,
+                        pressure_hpa,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY station_id
+                            ORDER BY timestamp DESC, id DESC
+                        ) AS row_number
+                    FROM readings
+                    WHERE station_id = ANY(%s)
+                      AND source IN (
+                          'historical',
+                          'live'
+                      )
+                ) history
+                WHERE row_number <= %s
+                ORDER BY station_id, timestamp ASC
+            """, (
+                station_ids,
+                limit,
+            ))
+
+            return cur.fetchall()
+
+
+def get_live_anomaly_history(station_ids):
+    """Return persisted live anomalies for multiple stations."""
+    station_ids = [str(station_id) for station_id in station_ids]
+    if not station_ids:
+        return []
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute("""
+                SELECT
+                    station_id,
+                    timestamp,
+                    anomaly_score,
+                    weather_or_sensor,
+                    confidence,
+                    fault_component
+                FROM readings
+                WHERE station_id = ANY(%s)
+                  AND source = 'live'
+                  AND anomaly = 1
+                ORDER BY station_id, timestamp ASC, id ASC
+            """, (
+                station_ids,
+            ))
+
+            return cur.fetchall()
+
+
 # ============================================================
 # SPATIAL CONTEXT
 # ============================================================

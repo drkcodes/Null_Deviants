@@ -216,11 +216,13 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
                 <span>Station Hardware & Channel Diagnostics</span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Evaluated from zero-variance entropy, drift coefficients, and neighbour divergence
+                 {health.explanation[0] || 'Evaluated from current telemetry and station history.'}
               </p>
             </div>
             <div className="text-xs text-slate-400 font-mono">
-              Last audit: {health.lastEvaluationTime}
+              {health.dataSufficiency.status === 'insufficient'
+                ? 'Insufficient telemetry history'
+                : `Last audit: ${health.lastEvaluationTime}`}
             </div>
           </div>
 
@@ -268,15 +270,21 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
           <div className="mt-4 pt-3 border-t border-slate-200/40 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-500">
             <div>
               <span className="font-medium text-slate-700">Missing Observation Rate: </span>
-              <span className="font-mono text-slate-900">{health.missingDataPct ?? 0}%</span>
+              <span className="font-mono text-slate-900">
+                {health.missingDataPct !== null ? `${health.missingDataPct.toFixed(1)}%` : '—'}
+              </span>
             </div>
             <div>
               <span className="font-medium text-slate-700">Drift Status: </span>
-              <span className="font-mono text-slate-900">{health.driftDetected ? 'Detected' : 'Nominal'}</span>
+              <span className="font-mono text-slate-900">
+                {health.drift.score !== null ? `${Math.round(health.drift.score * 100)}%` : '—'}
+              </span>
             </div>
             <div>
               <span className="font-medium text-slate-700">Neighbour Agreement: </span>
-              <span className="font-mono text-slate-900">{health.neighbourAgreementPct ?? 0}%</span>
+              <span className="font-mono text-slate-900">
+                {health.neighbourAgreementPct !== null ? `${health.neighbourAgreementPct.toFixed(1)}%` : '—'}
+              </span>
             </div>
           </div>
         </div>

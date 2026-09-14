@@ -34,32 +34,16 @@ export const SensorHealthView: React.FC<SensorHealthViewProps> = ({
       )
     : null;
   const healthyCount = hasReporting
-    ? reportingList.filter(
-        (h) =>
-          h.temperatureChannel === 'Normal' &&
-          h.humidityChannel === 'Normal' &&
-          h.pressureChannel === 'Normal',
-      ).length
-    : null;
-  const degradedCount = hasReporting
-    ? reportingList.filter(
-        (h) =>
-          (h.temperatureChannel === 'Degraded' ||
-            h.humidityChannel === 'Degraded' ||
-            h.pressureChannel === 'Degraded') &&
-          h.temperatureChannel !== 'Suspected fault' &&
-          h.humidityChannel !== 'Suspected fault' &&
-          h.pressureChannel !== 'Suspected fault',
-      ).length
-    : null;
-  const criticalCount = hasReporting
-    ? reportingList.filter(
-        (h) =>
-          h.temperatureChannel === 'Suspected fault' ||
-          h.humidityChannel === 'Suspected fault' ||
-          h.pressureChannel === 'Suspected fault',
-      ).length
-    : null;
+  ? reportingList.filter((h) => h.overallStatus === 'Healthy').length
+  : null;
+
+const degradedCount = hasReporting
+  ? reportingList.filter((h) => h.overallStatus === 'Degraded').length
+  : null;
+
+const criticalCount = hasReporting
+  ? reportingList.filter((h) => h.overallStatus === 'Critical').length
+  : null;
 
   const filtered = healthList.filter((item) => {
     const matchesSearch =
@@ -96,14 +80,14 @@ export const SensorHealthView: React.FC<SensorHealthViewProps> = ({
         <MetricCard
           label="Healthy Stations"
           value={healthyCount !== null ? healthyCount : 'N/A'}
-          subtitle={healthyCount !== null ? 'All 3 channels operating nominal' : 'Awaiting observation telemetry'}
+          subtitle={healthyCount !== null ? 'Overall station health is Healthy' : 'Awaiting observation telemetry'}
           icon={<CheckCircle2 className={`w-4 h-4 ${healthyCount !== null ? 'text-emerald-600' : 'text-slate-400'}`} />}
           indicatorColor={healthyCount !== null ? 'emerald' : 'slate'}
         />
         <MetricCard
           label="Degraded Stations"
           value={degradedCount !== null ? degradedCount : 'N/A'}
-          subtitle={degradedCount !== null ? 'Early calibration drift / noise' : 'Awaiting observation telemetry'}
+          subtitle={degradedCount !== null ? 'Overall station health is Degraded' : 'Awaiting observation telemetry'}
           icon={<AlertTriangle className={`w-4 h-4 ${degradedCount !== null ? 'text-amber-600' : 'text-slate-400'}`} />}
           indicatorColor={degradedCount !== null ? 'amber' : 'slate'}
         />
@@ -236,7 +220,7 @@ export const SensorHealthView: React.FC<SensorHealthViewProps> = ({
                         }`}
                       >
                         {item.overallHealth === null
-                          ? 'Awaiting telemetry'
+                          ? 'Insufficient Data'
                           : isUrgent
                           ? 'Immediate Field Dispatch'
                           : item.overallHealth < 85
