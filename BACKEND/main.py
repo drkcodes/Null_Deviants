@@ -2618,15 +2618,7 @@ def simulate(
         )
 
         # ----------------------------------------------------
-        # Run actual ML pipeline.
-        # ----------------------------------------------------
-
-        prediction = _run_real_models(
-            features
-        )
-
-        # ----------------------------------------------------
-        # Timestamp.
+        # Timestamp and station identity.
         # ----------------------------------------------------
 
         timestamp = _normalise_timestamp(
@@ -2638,6 +2630,83 @@ def simulate(
                 "station_id",
                 request.station_id,
             )
+        )
+
+        # ----------------------------------------------------
+        # Generate the same network evidence used by /ingest.
+        # ----------------------------------------------------
+
+        history = get_station_feature_history(
+            station_id=source_station,
+            before_timestamp=timestamp,
+            limit=96,
+        )
+
+        station_context = get_latest_station_context(
+            timestamp=timestamp,
+            max_age_seconds=1800,
+        )
+
+        all_station_history = pd.DataFrame(
+            station_context
+        )
+
+        current_context = pd.DataFrame(
+            [
+                {
+                    "station_id": source_station,
+                    "timestamp": timestamp,
+                    "temperature_c": raw_row.get(
+                        "temperature_c"
+                    ),
+                    "relative_humidity_pct": raw_row.get(
+                        "relative_humidity_pct"
+                    ),
+                    "pressure_hpa": raw_row.get(
+                        "pressure_hpa"
+                    ),
+                }
+            ]
+        )
+
+        if all_station_history.empty:
+            all_station_history = current_context
+        else:
+            all_station_history = pd.concat(
+                [
+                    all_station_history,
+                    current_context,
+                ],
+                ignore_index=True,
+            )
+
+        previous_context = _previous_network_context(
+            timestamp
+        )
+
+        evidence = _calculate_network_evidence(
+            station_id=source_station,
+            timestamp=timestamp,
+            current_context=all_station_history,
+            previous_context=previous_context,
+            features=features,
+            station_history=pd.concat(
+                [
+                    history,
+                    current_context,
+                ],
+                ignore_index=True,
+            ),
+        )
+
+        # ----------------------------------------------------
+        # Run actual ML pipeline.
+        # ----------------------------------------------------
+
+        prediction = _run_real_models(
+            features,
+            evidence=evidence,
+            station_id=source_station,
         )
 
         benchmark_type = _normalise_anomaly_type(
