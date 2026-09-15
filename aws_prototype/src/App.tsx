@@ -30,6 +30,7 @@ import { SettingsView } from './components/settings/SettingsView';
 import { SimulationDemoCenter } from './components/simulator/SimulationDemoCenter';
 
 const LIVE_REFRESH_MS = 2000;
+const MAINTENANCE_REFRESH_MS = 60000;
 
 export default function App() {
   const [activePage, setActivePage] = useState<ActivePage>('overview');
@@ -74,6 +75,13 @@ export default function App() {
    * expected, another polling cycle will not start on top of it.
    */
   const liveRefreshInProgress = useRef(false);
+
+    /*
+   * Maintenance risk is intentionally refreshed much less frequently
+   * than live telemetry. The Phase 8 engine is computationally heavier
+   * and maintenance priority does not need 2-second resolution.
+   */
+  const maintenanceRefreshInProgress = useRef(false);
 
   /*
    * Initial application load.
@@ -173,7 +181,6 @@ export default function App() {
         act,
         qual,
         ts,
-        maintenanceFleet,
       ] = await Promise.all([
         stationService.getStations(),
         stationService.getNetworkSummary(),
@@ -188,7 +195,6 @@ export default function App() {
               24,
             )
           : Promise.resolve([]),
-        stationService.getMaintenanceRiskFleet(),
       ]);
 
       /*
@@ -232,6 +238,41 @@ export default function App() {
     }
   }, [selectedStationId]);
 
+
+  /*
+   * Maintenance-risk refresh.
+   *
+   * Phase 8 maintenance prioritization is intentionally decoupled
+   * from the 2-second telemetry polling loop. This prevents the
+   * heavier maintenance-risk computation from competing with the
+   * real-time dashboard requests.
+   */
+  const refreshMaintenanceRisk = useCallback(async () => {
+    if (maintenanceRefreshInProgress.current) {
+      return;
+    }
+
+    maintenanceRefreshInProgress.current = true;
+
+    try {
+      const maintenanceFleet =
+        await stationService.getMaintenanceRiskFleet();
+
+      setMaintenanceRisk(maintenanceFleet.stations || []);
+    } catch (err) {
+      /*
+       * Keep the previous successful maintenance-risk state if
+       * a background refresh temporarily fails.
+       */
+      console.warn(
+        'Maintenance-risk refresh failed:',
+        err,
+      );
+    } finally {
+      maintenanceRefreshInProgress.current = false;
+    }
+  }, []);
+
   /*
    * Initial load.
    */
@@ -264,6 +305,23 @@ export default function App() {
       window.clearInterval(intervalId);
     };
   }, [refreshLiveData]);
+
+  /*
+   * SLOW MAINTENANCE-RISK POLLING
+   *
+   * Maintenance prioritization does not require 2-second resolution.
+   * Refresh it once per minute to avoid unnecessary backend/database
+   * contention while keeping the dashboard reasonably current.
+   */
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      refreshMaintenanceRisk();
+    }, MAINTENANCE_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [refreshMaintenanceRisk]);
 
   /*
    * Update time series immediately when the selected station changes.
