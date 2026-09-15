@@ -2632,18 +2632,31 @@ def simulate(
             )
         )
 
+        current_timestamp = pd.to_datetime(
+            raw_row.get("timestamp")
+        )
+
+        if current_timestamp.tzinfo is None:
+            current_timestamp = current_timestamp.tz_localize(
+                "Asia/Kolkata"
+            )
+        else:
+            current_timestamp = current_timestamp.tz_convert(
+                "Asia/Kolkata"
+            )
+
         # ----------------------------------------------------
         # Generate the same network evidence used by /ingest.
         # ----------------------------------------------------
 
         history = get_station_feature_history(
             station_id=source_station,
-            before_timestamp=timestamp,
+            before_timestamp=current_timestamp,
             limit=96,
         )
 
         station_context = get_latest_station_context(
-            timestamp=timestamp,
+            timestamp=current_timestamp,
             max_age_seconds=1800,
         )
 
@@ -2651,11 +2664,20 @@ def simulate(
             station_context
         )
 
+        if (
+            not all_station_history.empty
+            and "station_id" in all_station_history.columns
+        ):
+            all_station_history = all_station_history[
+                all_station_history["station_id"].astype(str)
+                != source_station
+            ]
+
         current_context = pd.DataFrame(
             [
                 {
                     "station_id": source_station,
-                    "timestamp": timestamp,
+                    "timestamp": current_timestamp,
                     "temperature_c": raw_row.get(
                         "temperature_c"
                     ),
@@ -2669,24 +2691,21 @@ def simulate(
             ]
         )
 
-        if all_station_history.empty:
-            all_station_history = current_context
-        else:
-            all_station_history = pd.concat(
-                [
-                    all_station_history,
-                    current_context,
-                ],
-                ignore_index=True,
-            )
+        all_station_history = pd.concat(
+            [
+                all_station_history,
+                current_context,
+            ],
+            ignore_index=True,
+        )
 
         previous_context = _previous_network_context(
-            timestamp
+            current_timestamp
         )
 
         evidence = _calculate_network_evidence(
             station_id=source_station,
-            timestamp=timestamp,
+            timestamp=current_timestamp,
             current_context=all_station_history,
             previous_context=previous_context,
             features=features,
@@ -2700,7 +2719,7 @@ def simulate(
         )
 
         # ----------------------------------------------------
-        # Run actual ML pipeline.
+        # Run actual ML pipeline with network evidence.
         # ----------------------------------------------------
 
         prediction = _run_real_models(
