@@ -20,6 +20,8 @@ dist/
 
 # Large datasets
 *.csv
+!BACKEND/SIH26073_AP_AWS_observations.csv
+!BACKEND/SIH26073_simulator_manifest.csv
 *.csv.gz
 *.zip
 
