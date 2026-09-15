@@ -1,3 +1,4 @@
+import os
 import json
 import math
 import time
@@ -9,7 +10,10 @@ import requests
 from database import reset_live_data as reset_live_data_db
 
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = os.getenv(
+    "SKYGUARD_API_URL",
+    "http://127.0.0.1:8000",
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -270,7 +274,15 @@ def get_sequential_timestamps(
 # ============================================================
 
 def reset_live_data():
-    reset_live_data_db()
+    if API_URL.startswith("http://127.0.0.1") or API_URL.startswith("http://localhost"):
+        reset_live_data_db()
+        return
+
+    response = requests.post(
+        f"{API_URL}/reset",
+        timeout=30,
+    )
+    response.raise_for_status()
 
 
 # ============================================================
@@ -406,7 +418,7 @@ def ingest_batch(
     response = requests.post(
         f"{API_URL}/ingest/batch",
         json=payload,
-        timeout=30,
+        timeout=120,
     )
 
     if response.status_code != 200:
