@@ -2649,10 +2649,12 @@ def simulate(
         # Generate the same network evidence used by /ingest.
         # ----------------------------------------------------
 
-        history = get_station_feature_history(
-            station_id=source_station,
-            before_timestamp=current_timestamp,
-            limit=96,
+        history = pd.DataFrame(
+            get_station_feature_history(
+                station_id=source_station,
+                before_timestamp=current_timestamp,
+                limit=96,
+            )
         )
 
         station_context = get_latest_station_context(
