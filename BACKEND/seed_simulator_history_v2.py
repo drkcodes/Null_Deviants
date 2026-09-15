@@ -151,21 +151,32 @@ def get_counts(conn):
 
 
 def get_existing_keys(conn, df: pd.DataFrame) -> set[tuple[str, pd.Timestamp]]:
-    stations = sorted(df["station_id"].unique().tolist())
-    min_ts = df["timestamp"].min().to_pydatetime()
-    max_ts = df["timestamp"].max().to_pydatetime()
+    if df.empty:
+        return set()
+
+    timestamps = pd.to_datetime(df["timestamp"], errors="coerce")
+
+    if timestamps.dt.tz is None:
+        timestamps = timestamps.dt.tz_localize("Asia/Kolkata")
+    else:
+        timestamps = timestamps.dt.tz_convert("Asia/Kolkata")
+
+    min_ts = timestamps.min().tz_convert("UTC").to_pydatetime()
+    max_ts = timestamps.max().tz_convert("UTC").to_pydatetime()
+
+    station_ids = sorted(df["station_id"].astype(str).unique())
 
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT station_id, timestamp
             FROM readings
-            WHERE source IN ('historical', 'live')
-              AND station_id = ANY(%s)
+            WHERE station_id = ANY(%s)
               AND timestamp >= %s
               AND timestamp <= %s
+              AND source IN ('historical', 'live')
             """,
-            (stations, min_ts, max_ts),
+            (station_ids, min_ts, max_ts),
         )
         rows = cur.fetchall()
 
@@ -173,8 +184,11 @@ def get_existing_keys(conn, df: pd.DataFrame) -> set[tuple[str, pd.Timestamp]]:
 
     for row in rows:
         ts = pd.Timestamp(row["timestamp"])
-        if ts.tzinfo is not None:
-            ts = ts.tz_localize(None)
+
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        else:
+            ts = ts.tz_convert("UTC")
 
         result.add((str(row["station_id"]), ts))
 
@@ -182,9 +196,16 @@ def get_existing_keys(conn, df: pd.DataFrame) -> set[tuple[str, pd.Timestamp]]:
 
 
 def row_to_params(row):
+    timestamp = pd.Timestamp(row.timestamp)
+
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.tz_localize("Asia/Kolkata")
+    else:
+        timestamp = timestamp.tz_convert("Asia/Kolkata")
+
     return (
         str(row.station_id),
-        pd.Timestamp(row.timestamp).to_pydatetime(),
+        timestamp.to_pydatetime(),
         float(row.temperature_c),
         float(row.relative_humidity_pct),
         float(row.pressure_hpa),
