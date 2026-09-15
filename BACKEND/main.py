@@ -1544,6 +1544,8 @@ def _run_real_models(
     frozen_sensor = 0.0
     drift = 0.0
     network_coherence = 0.0
+    persistence_run_length = 0
+    directional_consistency = 0.0
 
     if evidence:
         evidence_score = float(
@@ -1602,6 +1604,20 @@ def _run_real_models(
             )
         )
 
+        persistence_run_length = int(
+            evidence.get(
+                "persistence_run_length",
+                0,
+            )
+        )
+
+        directional_consistency = float(
+            evidence.get(
+                "directional_consistency",
+                0.0,
+            )
+        )
+
         progressive_sensor_evidence = (
             progressive_drift >= 0.60
             and isolation >= 0.35
@@ -1633,7 +1649,7 @@ def _run_real_models(
 
     strong_temporal_drift = (
         drift >= 0.80
-        and isolation >= 0.25
+        and isolation >= 0.75
         and network_coherence < 0.70
     )
 
@@ -1643,18 +1659,39 @@ def _run_real_models(
         and network_coherence < 0.75
     )
 
+    independent_sensor_evidence = (
+        strong_isolation
+        or strong_temporal_drift
+        or progressive_sensor_evidence
+    )
+
+    hard_data_quality_failure = (
+        data_quality >= 1.0
+        or frozen_sensor >= 1.0
+    )
+
+    strong_regional_evidence = (
+        regional >= 0.70
+        and network_coherence >= 0.70
+    )
+
+    # Strong, independently-corroborated evidence is conclusive on
+    # its own and must not be gated behind the RF model's own vote.
+    # Only weak/ambiguous evidence still requires RF corroboration.
+    evidence_direct_anomaly = (
+        hard_data_quality_failure
+        or strong_regional_evidence
+        or independent_sensor_evidence
+    )
+
     corroborated_rf_anomaly = (
         rf_anomaly
-        and (
-            evidence_anomaly
-            or strong_isolation
-            or strong_temporal_drift
-        )
+        and evidence_anomaly
     )
 
     is_anomaly = bool(
-        corroborated_rf_anomaly
-        or evidence_anomaly
+        evidence_direct_anomaly
+        or corroborated_rf_anomaly
     )
 
     print(
@@ -1662,6 +1699,8 @@ def _run_real_models(
         {
             "station_id": station_id,
             "progressive_drift": progressive_drift,
+            "persistence_run_length": persistence_run_length,
+            "directional_consistency": directional_consistency,
             "isolation": isolation,
             "sensor_fault": (
                 evidence.get("sensor_fault", 0.0)
@@ -1684,7 +1723,7 @@ def _run_real_models(
         if is_anomaly
         else 0.0,
         evidence_score
-        if evidence_anomaly
+        if (evidence_anomaly or independent_sensor_evidence)
         else 0.0,
     )
 
