@@ -133,10 +133,13 @@ feature_cols = [
 # DATASET LOCATIONS
 # ============================================================
 
+BACKEND_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = BACKEND_DIR.parent
+
 DATASET_CANDIDATES = [
-    Path("../ML training/SIH26073_AP_AWS_observations.csv"),
-    Path("../Data/claude_DataSet/SIH26073_AP_AWS_observations.csv"),
-    Path("SIH26073_AP_AWS_observations.csv"),
+    BACKEND_DIR / "SIH26073_AP_AWS_observations.csv",
+    PROJECT_DIR / "ML training" / "SIH26073_AP_AWS_observations.csv",
+    PROJECT_DIR / "Data" / "claude_DataSet" / "SIH26073_AP_AWS_observations.csv",
 ]
 
 # ============================================================
@@ -302,13 +305,17 @@ def _normalise_anomaly_type(value) -> str:
 
 def _load_simulation_examples() -> dict:
     """
-    Read the benchmark CSV once and cache real observations
-    for each station/scenario combination.
+    Load the curated SIH26073 benchmark observations used by
+    the Demo Center.
 
-    We do NOT fabricate a complete feature vector.
+    The compact backend fixture contains one real benchmark
+    observation for every station + supported scenario
+    combination. These observations are selected from the
+    full SIH26073 benchmark dataset and are used only as
+    controlled simulation inputs.
 
-    The observation already contains the model-engineered
-    features used during training.
+    The actual model feature engineering, network evidence,
+    and Random Forest inference remain unchanged.
     """
 
     global _simulation_examples
@@ -319,44 +326,51 @@ def _load_simulation_examples() -> dict:
     dataset_path = _find_dataset()
 
     print(
-        f"Loading benchmark examples from: {dataset_path}"
+        f"Loading curated benchmark examples from: "
+        f"{dataset_path}"
     )
 
-    # --------------------------------------------------------
-    # Read only the header first.
-    # --------------------------------------------------------
+    required_columns = [
+        "station_id",
+        "timestamp",
+        "temperature_c",
+        "relative_humidity_pct",
+        "pressure_hpa",
+        "anomaly_type",
+    ]
 
     header = pd.read_csv(
         dataset_path,
-        nrows=0
+        nrows=0,
     )
 
-    available = set(header.columns)
-
-    # --------------------------------------------------------
-    # Columns needed by the model + benchmark metadata.
-    # --------------------------------------------------------
-
-    required_columns = list(
-        dict.fromkeys(
-            feature_cols
-            + [
-                "station_id",
-                "timestamp",
-                "timestamp_utc",
-                "anomaly_type",
-                "temperature_lag_24h",
-                "humidity_lag_24h",
-                "pressure_lag_24h",
-            ]
-        )
-    )
-
-    usecols = [
+    missing_columns = [
         column
         for column in required_columns
-        if column in available
+        if column not in header.columns
     ]
+
+    if missing_columns:
+        raise ValueError(
+            "Simulation benchmark fixture is missing "
+            f"required columns: {missing_columns}"
+        )
+
+    fixture = pd.read_csv(
+        dataset_path,
+        usecols=required_columns,
+    )
+
+    fixture["station_id"] = (
+        fixture["station_id"]
+        .astype(str)
+        .str.strip()
+    )
+
+    fixture["anomaly_type_norm"] = (
+        fixture["anomaly_type"]
+        .apply(_normalise_anomaly_type)
+    )
 
     wanted_types = {
         "spike",
@@ -366,74 +380,70 @@ def _load_simulation_examples() -> dict:
         "cold_spell",
     }
 
+    fixture = fixture[
+        fixture["anomaly_type_norm"].isin(wanted_types)
+    ].copy()
+
     found = {}
 
-    # --------------------------------------------------------
-    # Read in chunks because the dataset is large.
-    # --------------------------------------------------------
+    for _, row in fixture.iterrows():
 
-    for chunk in pd.read_csv(
-        dataset_path,
-        usecols=usecols,
-        chunksize=100000,
-    ):
+        station_id = str(
+            row["station_id"]
+        ).strip()
 
-        if (
-            "anomaly_type" not in chunk.columns
-            or "station_id" not in chunk.columns
-        ):
-            continue
+        anomaly_type = str(
+            row["anomaly_type_norm"]
+        ).strip()
 
-        chunk["anomaly_type_norm"] = (
-            chunk["anomaly_type"]
-            .apply(_normalise_anomaly_type)
+        key = (
+            station_id,
+            anomaly_type,
         )
 
-        matches = chunk[
-            chunk["anomaly_type_norm"].isin(wanted_types)
-        ]
-
-        if matches.empty:
-            continue
-
-        # ----------------------------------------------------
-        # Cache first real benchmark row for each
-        # station + anomaly type.
-        # ----------------------------------------------------
-
-        for _, row in matches.iterrows():
-
-            station = str(
-                row["station_id"]
-            ).strip()
-
-            anomaly_type = str(
-                row["anomaly_type_norm"]
+        # The compact fixture is intentionally curated with
+        # exactly one target observation per station/scenario.
+        if key in found:
+            raise ValueError(
+                "Duplicate curated simulation observation "
+                f"for station={station_id}, "
+                f"scenario={anomaly_type}"
             )
 
-            key = (
-                station,
-                anomaly_type,
-            )
+        found[key] = {
+            "station_id": station_id,
+            "timestamp": str(
+                row["timestamp"]
+            ),
+            "temperature_c": float(
+                row["temperature_c"]
+            ),
+            "relative_humidity_pct": float(
+                row["relative_humidity_pct"]
+            ),
+            "pressure_hpa": float(
+                row["pressure_hpa"]
+            ),
+            "anomaly_type": anomaly_type,
+        }
 
-            if key not in found:
-                found[key] = row.to_dict()
+    expected_count = 20 * len(wanted_types)
 
-        # We have enough when every station has an example
-        # for every supported scenario.
-        if len(found) >= 20 * len(wanted_types):
-            break
+    if len(found) != expected_count:
+        raise ValueError(
+            "Curated simulation fixture is incomplete. "
+            f"Expected {expected_count} station/scenario "
+            f"observations, found {len(found)}."
+        )
 
     _simulation_examples = found
 
     print(
-        f"Cached benchmark simulation examples: "
-        f"{len(found)}"
+        f"Loaded {len(found)} curated simulation "
+        "observations."
     )
 
     return _simulation_examples
-
-
 # ============================================================
 # SELECT BENCHMARK OBSERVATION
 # ============================================================
