@@ -27,7 +27,7 @@ from psycopg.rows import dict_row
 
 
 BACKEND_DIR = Path(__file__).resolve().parent
-SEED_PATH = BACKEND_DIR / "SIH26073_simulator_history_seed.csv"
+SEED_PATH = BACKEND_DIR / "simulator_history_seed.csv"
 
 REQUIRED_COLUMNS = [
     "station_id",
