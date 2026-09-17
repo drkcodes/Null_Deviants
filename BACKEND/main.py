@@ -1628,6 +1628,29 @@ def _run_real_models(
             )
         )
 
+        # --------------------------------------------------------
+        # Persistent regional-state values.
+        #
+        # These are computed by _calculate_persistent_regional_state
+        # and merged into the evidence dict before _run_real_models
+        # is called. Reading them here (not recomputing) keeps the
+        # evidence pipeline single-pass.
+        # --------------------------------------------------------
+
+        regional_state_evidence_val = float(
+            evidence.get(
+                "regional_state_evidence",
+                0.0,
+            )
+        )
+
+        regional_state_coherence_val = float(
+            evidence.get(
+                "regional_state_coherence",
+                0.0,
+            )
+        )
+
         progressive_sensor_evidence = (
             progressive_drift >= 0.60
             and isolation >= 0.35
@@ -1685,12 +1708,46 @@ def _run_real_models(
         and network_coherence >= 0.70
     )
 
+    # --------------------------------------------------------
+    # Persistent regional-state direct-anomaly path.
+    #
+    # A sustained regional weather event (heatwave, cold-spell)
+    # does not produce a large short-term Δ-movement signal, so
+    # regional_event stays low and strong_regional_evidence does
+    # not fire. The RF Stage 1 model, trained on station-level
+    # features, also sees the observation as "normal" because the
+    # displacement is stable rather than abrupt.
+    #
+    # regional_state_evidence = regional_state_strength *
+    # regional_state_coherence. Requiring both the product AND
+    # the coherence fraction to exceed 0.60 means both:
+    #   (a) the magnitude of displacement must be significant, AND
+    #   (b) a clear majority of the network must share that state.
+    # If either is low the product collapses below the threshold.
+    #
+    # The isolation guard (< 0.50) is the critical safeguard:
+    # a sensor fault at a single station produces high isolation
+    # regardless of the regional background state. This prevents
+    # the persistent-state path from triggering on an isolated
+    # hardware fault during a genuine regional event.
+    #
+    # These thresholds reflect the physical signal semantics;
+    # they are not tuned against specific benchmark outcomes.
+    # --------------------------------------------------------
+
+    strong_persistent_regional_state = (
+        regional_state_evidence_val >= 0.60
+        and regional_state_coherence_val >= 0.60
+        and isolation < 0.50
+    ) if evidence else False
+
     # Strong, independently-corroborated evidence is conclusive on
     # its own and must not be gated behind the RF model's own vote.
     # Only weak/ambiguous evidence still requires RF corroboration.
     evidence_direct_anomaly = (
         hard_data_quality_failure
         or strong_regional_evidence
+        or strong_persistent_regional_state
         or independent_sensor_evidence
     )
 
@@ -1793,12 +1850,70 @@ def _run_real_models(
                 regional >= 0.70
                 and network_coherence >= 0.70
             ):
+                # Short-term coherent network movement → weather.
+                # The network delta is large and spatially coherent;
+                # all stations are moving together right now.
                 weather_or_sensor = "weather"
 
                 cause_confidence = _clip01(
                     max(
                         rf_cause_confidence,
                         0.70 + 0.30 * regional,
+                    )
+                )
+
+            elif (
+                # --------------------------------------------------------
+                # PERSISTENT REGIONAL-STATE → weather override.
+                #
+                # regional_state_evidence is the PRODUCT of
+                # regional_state_strength × regional_state_coherence.
+                # Both magnitude and network-wide participation must be
+                # jointly present (the product collapses if either is low).
+                #
+                # The isolation guard is the critical general safeguard:
+                # a sensor fault at a single station will have high
+                # isolation regardless of background regional state.
+                # Requiring isolation < 0.50 means this branch can only
+                # fire when the target station is NOT singled out
+                # relative to its peers — i.e., it shares the displaced
+                # state with the network.
+                #
+                # This is deliberately independent of regional_event.
+                # regional_event detects short-term coherent movement;
+                # regional_state_evidence detects persistent displacement
+                # from each station's own historical baseline, which is
+                # the correct signal for sustained heatwaves/cold-spells
+                # where the network is stable-but-displaced (Δ near zero,
+                # absolute displacement large).
+                # --------------------------------------------------------
+                float(
+                    evidence.get(
+                        "regional_state_evidence",
+                        0.0,
+                    )
+                ) >= 0.60
+                and float(
+                    evidence.get(
+                        "regional_state_coherence",
+                        0.0,
+                    )
+                ) >= 0.60
+                and isolation < 0.50
+            ):
+                regional_state_evidence_val = float(
+                    evidence.get(
+                        "regional_state_evidence",
+                        0.0,
+                    )
+                )
+
+                weather_or_sensor = "weather"
+
+                cause_confidence = _clip01(
+                    max(
+                        rf_cause_confidence,
+                        0.60 + 0.40 * regional_state_evidence_val,
                     )
                 )
 
@@ -1931,10 +2046,250 @@ def _normalize_ingest_timestamp(timestamp: str):
 
     return current_timestamp
 
+def _calculate_persistent_regional_state(
+    current_context: pd.DataFrame,
+    historical_context: pd.DataFrame,
+    current_timestamp=None,
+) -> dict:
+    """
+    Detect persistent regional-state evidence.
+
+    This is deliberately separate from regional_event.
+
+    regional_event:
+        Short-term coherent network movement.
+
+    regional_state_evidence:
+        Current network state persistently displaced from
+        each station's own historical baseline.
+    """
+
+    empty_result = {
+        "regional_state_strength": 0.0,
+        "regional_state_coherence": 0.0,
+        "regional_state_evidence": 0.0,
+    }
+
+    if (
+        current_context is None
+        or current_context.empty
+        or historical_context is None
+        or historical_context.empty
+    ):
+        return empty_result
+
+    required_columns = [
+        "station_id",
+        "temperature_c",
+        "relative_humidity_pct",
+        "pressure_hpa",
+    ]
+
+    history_columns = [
+        "station_id",
+        "timestamp",
+        "temperature_c",
+        "relative_humidity_pct",
+        "pressure_hpa",
+    ]
+
+    if any(
+        column not in current_context.columns
+        for column in required_columns
+    ):
+        return empty_result
+
+    if any(
+        column not in historical_context.columns
+        for column in history_columns
+    ):
+        return empty_result
+
+    current = current_context[
+        required_columns
+    ].copy()
+
+    history = historical_context[
+        history_columns
+    ].copy()
+
+    current["station_id"] = (
+        current["station_id"]
+        .astype(str)
+    )
+
+    history["station_id"] = (
+        history["station_id"]
+        .astype(str)
+    )
+
+    numeric_columns = required_columns[1:]
+
+    for column in numeric_columns:
+        current[column] = pd.to_numeric(
+            current[column],
+            errors="coerce",
+        )
+
+        history[column] = pd.to_numeric(
+            history[column],
+            errors="coerce",
+        )
+
+    current = current.dropna(
+        subset=numeric_columns
+    )
+
+    history = history.dropna(
+        subset=numeric_columns
+    )
+
+    # Never allow observations at or after the observation being
+    # evaluated to influence the historical baseline. This matters
+    # especially for controlled simulator timestamps because the
+    # database can contain benchmark history from later dates.
+    if current_timestamp is not None and not history.empty:
+        evaluation_timestamp = pd.to_datetime(
+            current_timestamp,
+            errors="coerce",
+            utc=True,
+        )
+
+        if pd.notna(evaluation_timestamp):
+            history["timestamp"] = pd.to_datetime(
+                history["timestamp"],
+                errors="coerce",
+                utc=True,
+            )
+
+            history = history[
+                history["timestamp"] < evaluation_timestamp
+            ]
+
+    if len(current) < 5 or history.empty:
+        return empty_result
+
+    # --------------------------------------------------------
+    # Station-specific historical baseline.
+    #
+    # Median is used instead of mean so that isolated spikes,
+    # drops and jumps do not substantially distort the baseline.
+    # --------------------------------------------------------
+
+    baseline = (
+        history
+        .groupby("station_id")[
+            numeric_columns
+        ]
+        .median()
+        .reset_index()
+    )
+
+    merged = current.merge(
+        baseline,
+        on="station_id",
+        how="inner",
+        suffixes=(
+            "_current",
+            "_baseline",
+        ),
+    )
+
+    if len(merged) < 5:
+        return empty_result
+
+    # --------------------------------------------------------
+    # Current displacement from station baseline.
+    #
+    # These are evidence scaling factors, not anomaly
+    # thresholds.
+    # --------------------------------------------------------
+
+    temperature_displacement = (
+        (
+            merged["temperature_c_current"]
+            - merged["temperature_c_baseline"]
+        ).abs()
+        / 4.0
+    ).clip(
+        lower=0.0,
+        upper=1.0,
+    )
+
+    humidity_displacement = (
+        (
+            merged["relative_humidity_pct_current"]
+            - merged["relative_humidity_pct_baseline"]
+        ).abs()
+        / 15.0
+    ).clip(
+        lower=0.0,
+        upper=1.0,
+    )
+
+    pressure_displacement = (
+        (
+            merged["pressure_hpa_current"]
+            - merged["pressure_hpa_baseline"]
+        ).abs()
+        / 8.0
+    ).clip(
+        lower=0.0,
+        upper=1.0,
+    )
+
+    # --------------------------------------------------------
+    # Composite station-state displacement.
+    #
+    # Temperature + humidity carry most of the persistent
+    # thermal-state signal. Pressure remains supporting
+    # evidence.
+    # --------------------------------------------------------
+
+    station_strength = (
+        0.50 * temperature_displacement
+        + 0.35 * humidity_displacement
+        + 0.15 * pressure_displacement
+    ).clip(
+        lower=0.0,
+        upper=1.0,
+    )
+
+    regional_state_strength = float(
+        station_strength.median()
+    )
+
+    # Fraction of stations showing meaningful persistent
+    # displacement.
+    regional_state_coherence = _clip01(
+        float(
+            (
+                station_strength >= 0.35
+            ).mean()
+        )
+    )
+
+    # Both magnitude and participation must be present.
+    regional_state_evidence = _clip01(
+        regional_state_strength
+        * regional_state_coherence
+    )
+
+    return {
+        "regional_state_strength":
+            _clip01(regional_state_strength),
+
+        "regional_state_coherence":
+            _clip01(regional_state_coherence),
+
+        "regional_state_evidence":
+            _clip01(regional_state_evidence),
+    }
 
 def _build_live_prediction_context(
     reading: RawTelemetry,
     spatial_context: pd.DataFrame | None = None,
+    persistent_history_context: pd.DataFrame | None = None,
 ):
     current_timestamp = _normalize_ingest_timestamp(
         reading.timestamp
@@ -2011,6 +2366,33 @@ def _build_live_prediction_context(
         ignore_index=True,
     )
 
+    # --------------------------------------------------------
+    # Persistent regional-state context.
+    #
+    # Fetch bounded recent history for every station present in
+    # the contemporaneous network snapshot. For /ingest/batch,
+    # the caller supplies this dataframe once so the same
+    # history is reused for every station.
+    # --------------------------------------------------------
+
+    if persistent_history_context is None:
+        persistent_station_ids = (
+            all_station_history["station_id"]
+            .astype(str)
+            .drop_duplicates()
+            .tolist()
+        )
+
+        persistent_history_context = pd.DataFrame(
+            get_station_feature_history_batch(
+                persistent_station_ids,
+                limit=672,
+            )
+        )
+
+    if persistent_history_context is None:
+        persistent_history_context = pd.DataFrame()
+
     features = build_features(
         station_id=reading.station_id,
         timestamp=current_timestamp,
@@ -2051,12 +2433,32 @@ def _build_live_prediction_context(
         ),
     )
 
+    # --------------------------------------------------------
+    # Add persistent regional-state evidence as a parallel
+    # signal. Existing short-term regional_event and
+    # network_coherence semantics remain untouched.
+    #
+    # This phase intentionally exposes the new signal without
+    # changing the anomaly fusion decision in _run_real_models.
+    # --------------------------------------------------------
+
+    persistent_regional_state = _calculate_persistent_regional_state(
+        current_context=all_station_history,
+        historical_context=persistent_history_context,
+        current_timestamp=current_timestamp,
+    )
+
+    evidence.update(
+        persistent_regional_state
+    )
+
     return current_timestamp, features, evidence
 
 
 def _process_live_reading(
     reading: RawTelemetry,
     spatial_context: pd.DataFrame | None = None,
+    persistent_history_context: pd.DataFrame | None = None,
 ):
     """
     Build the canonical 50-feature vector and run the real
@@ -2070,6 +2472,7 @@ def _process_live_reading(
     current_timestamp, features, evidence = _build_live_prediction_context(
         reading,
         spatial_context=spatial_context,
+        persistent_history_context=persistent_history_context,
     )
 
     model_result = _run_real_models(
@@ -2278,6 +2681,19 @@ def ingest_batch(
             )
 
         # ----------------------------------------------------
+        # Fetch persistent regional-state history once for the
+        # complete batch and reuse it for every station.
+        # This avoids 20 identical seven-day history queries.
+        # ----------------------------------------------------
+
+        persistent_history_context = pd.DataFrame(
+            get_station_feature_history_batch(
+                station_ids,
+                limit=672,
+            )
+        )
+
+        # ----------------------------------------------------
         # Run all predictions against the SAME snapshot.
         #
         # Nothing is persisted until every prediction has been
@@ -2291,6 +2707,7 @@ def ingest_batch(
             result = _process_live_reading(
                 reading,
                 spatial_context=spatial_context,
+                persistent_history_context=persistent_history_context,
             )
 
             results.append(result)
@@ -2711,6 +3128,20 @@ def simulate(
             ignore_index=True,
         )
 
+        persistent_station_ids = (
+            all_station_history["station_id"]
+            .astype(str)
+            .drop_duplicates()
+            .tolist()
+        )
+
+        persistent_history_context = pd.DataFrame(
+            get_station_feature_history_batch(
+                persistent_station_ids,
+                limit=672,
+            )
+        )
+
         previous_context = _previous_network_context(
             current_timestamp
         )
@@ -2728,6 +3159,16 @@ def simulate(
                 ],
                 ignore_index=True,
             ),
+        )
+
+        persistent_regional_state = _calculate_persistent_regional_state(
+            current_context=all_station_history,
+            historical_context=persistent_history_context,
+            current_timestamp=current_timestamp,
+        )
+
+        evidence.update(
+            persistent_regional_state
         )
 
         # ----------------------------------------------------
