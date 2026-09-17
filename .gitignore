@@ -22,6 +22,7 @@ dist/
 *.csv
 !BACKEND/SIH26073_AP_AWS_observations.csv
 !BACKEND/SIH26073_simulator_manifest.csv
+!BACKEND/simulator_history_seed.csv
 *.csv.gz
 *.zip
 
