@@ -1738,12 +1738,25 @@ def _run_real_models(
     strong_persistent_regional_state = (
         regional_state_evidence_val >= 0.60
         and regional_state_coherence_val >= 0.60
-        and isolation < 0.50
     ) if evidence else False
 
-    # Strong, independently-corroborated evidence is conclusive on
-    # its own and must not be gated behind the RF model's own vote.
-    # Only weak/ambiguous evidence still requires RF corroboration.
+    dominant_persistent_regional_state = (
+        strong_persistent_regional_state
+        and network_coherence >= 0.83
+    )
+
+    strong_localized_sensor_evidence = (
+        hard_data_quality_failure
+        or strong_isolation
+        or strong_temporal_drift
+        or progressive_sensor_evidence
+    )
+
+    persistent_regional_weather = (
+        dominant_persistent_regional_state
+        and not hard_data_quality_failure
+    )
+
     evidence_direct_anomaly = (
         hard_data_quality_failure
         or strong_regional_evidence
@@ -1863,43 +1876,8 @@ def _run_real_models(
                 )
 
             elif (
-                # --------------------------------------------------------
-                # PERSISTENT REGIONAL-STATE → weather override.
-                #
-                # regional_state_evidence is the PRODUCT of
-                # regional_state_strength × regional_state_coherence.
-                # Both magnitude and network-wide participation must be
-                # jointly present (the product collapses if either is low).
-                #
-                # The isolation guard is the critical general safeguard:
-                # a sensor fault at a single station will have high
-                # isolation regardless of background regional state.
-                # Requiring isolation < 0.50 means this branch can only
-                # fire when the target station is NOT singled out
-                # relative to its peers — i.e., it shares the displaced
-                # state with the network.
-                #
-                # This is deliberately independent of regional_event.
-                # regional_event detects short-term coherent movement;
-                # regional_state_evidence detects persistent displacement
-                # from each station's own historical baseline, which is
-                # the correct signal for sustained heatwaves/cold-spells
-                # where the network is stable-but-displaced (Δ near zero,
-                # absolute displacement large).
-                # --------------------------------------------------------
-                float(
-                    evidence.get(
-                        "regional_state_evidence",
-                        0.0,
-                    )
-                ) >= 0.60
-                and float(
-                    evidence.get(
-                        "regional_state_coherence",
-                        0.0,
-                    )
-                ) >= 0.60
-                and isolation < 0.50
+                dominant_persistent_regional_state
+                and not hard_data_quality_failure
             ):
                 regional_state_evidence_val = float(
                     evidence.get(

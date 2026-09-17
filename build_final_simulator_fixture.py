@@ -45,23 +45,34 @@ print(f"Stations: {df['station_id'].nunique()}")
 # Build 20 -> 20 valid timestamps
 # ---------------------------------------------------------
 
+# A valid network snapshot requires exactly 20 stations
+# with complete temperature, RH, and pressure observations.
+
+complete_df = df.dropna(
+    subset=VALUE_COLS
+)
+
 counts = (
-    df.groupby("timestamp")["station_id"]
+    complete_df.groupby("timestamp")["station_id"]
     .nunique()
 )
 
 full_network = set(
-    counts[counts >= 20].index
+    counts[counts == 20].index
 )
 
 valid_windows = sorted(
-    ts for ts in full_network
+    ts
+    for ts in full_network
     if ts - pd.Timedelta(minutes=15) in full_network
 )
 
 valid_set = set(valid_windows)
 
-print(f"20->20 valid windows: {len(valid_windows):,}")
+print(
+    "20->20 complete valid windows:",
+    len(valid_windows),
+)
 
 # ---------------------------------------------------------
 # Build previous observation lookup
@@ -348,7 +359,10 @@ for scenario, ts in regional_specs:
         df["timestamp"] == ts
     ].copy()
 
-    if len(current) != 20:
+    if (
+        current["station_id"].nunique() != 20
+        or current[VALUE_COLS].isna().any().any()
+    ):
         raise RuntimeError(
             f"{scenario}: expected 20 stations, "
             f"found {len(current)}"
@@ -359,7 +373,10 @@ for scenario, ts in regional_specs:
         == ts - pd.Timedelta(minutes=15)
     ]
 
-    if len(previous) != 20:
+    if (
+        previous["station_id"].nunique() != 20
+        or previous[VALUE_COLS].isna().any().any()
+    ):
         raise RuntimeError(
             f"{scenario}: previous snapshot "
             f"does not contain 20 stations"
@@ -499,11 +516,13 @@ for _, row in fixture.iterrows():
         df["timestamp"] == ts
     ]
 
-    if current_network["station_id"].nunique() != 20:
+    if (
+        current_network["station_id"].nunique() != 20
+        or current_network[VALUE_COLS].isna().any().any()
+    ):
         raise RuntimeError(
-            f"Current network context incomplete for "
-            f"{station} @ {ts}: "
-            f"{current_network['station_id'].nunique()} stations"
+            f"Current network context incomplete or contains "
+            f"missing values for {station} @ {ts}"
         )
 
     history_parts.append(
@@ -530,11 +549,13 @@ for _, row in fixture.iterrows():
         df["timestamp"] == previous_ts
     ]
 
-    if previous_network["station_id"].nunique() != 20:
+    if (
+        previous_network["station_id"].nunique() != 20
+        or previous_network[VALUE_COLS].isna().any().any()
+    ):
         raise RuntimeError(
-            f"Previous network context incomplete for "
-            f"{station} @ {ts}: "
-            f"{previous_network['station_id'].nunique()} stations"
+            f"Previous network context incomplete or contains "
+            f"missing values for {station} @ {ts}"
         )
 
     history_parts.append(
@@ -676,18 +697,32 @@ for _, row in fixture.iterrows():
         previous_seed["station_id"].nunique()
     )
 
-    if current_count != 20:
+    current_complete = (
+        current_seed[VALUE_COLS]
+        .notna()
+        .all(axis=1)
+        .sum()
+    )
+
+    previous_complete = (
+        previous_seed[VALUE_COLS]
+        .notna()
+        .all(axis=1)
+        .sum()
+    )
+
+    if current_count != 20 or current_complete != 20:
         raise RuntimeError(
-            f"Generated seed missing current "
+            f"Generated seed missing complete current "
             f"network context for {station} @ {ts}: "
-            f"{current_count}/20 stations"
+            f"{current_complete}/20 complete stations"
         )
 
-    if previous_count != 20:
+    if previous_count != 20 or previous_complete != 20:
         raise RuntimeError(
-            f"Generated seed missing previous "
+            f"Generated seed missing complete previous "
             f"network context for {station} @ {ts}: "
-            f"{previous_count}/20 stations"
+            f"{previous_complete}/20 complete stations"
         )
 
 # ---------------------------------------------------------

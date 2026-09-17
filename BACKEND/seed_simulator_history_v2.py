@@ -338,10 +338,16 @@ def main():
 
     for row in df.itertuples(index=False):
         ts = pd.Timestamp(row.timestamp)
-        if ts.tzinfo is not None:
-            ts = ts.tz_localize(None)
 
-        key = (str(row.station_id), ts)
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("Asia/Kolkata")
+        else:
+            ts = ts.tz_convert("Asia/Kolkata")
+
+        key = (
+            str(row.station_id),
+            ts.tz_convert("UTC"),
+        )
 
         if key not in existing:
             pending.append(row)
