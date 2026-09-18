@@ -327,6 +327,10 @@ export default function App() {
    *   - selected station graph
    */
   useEffect(() => {
+    if (loading || error) {
+      return;
+    }
+
     const intervalId = window.setInterval(() => {
       refreshLiveData();
     }, LIVE_REFRESH_MS);
@@ -334,7 +338,7 @@ export default function App() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [refreshLiveData]);
+  }, [loading, error, refreshLiveData]);
 
   /*
    * SLOW BACKGROUND POLLING
@@ -344,6 +348,10 @@ export default function App() {
    * backend/database contention while keeping the dashboard current.
    */
   useEffect(() => {
+    if (loading || error) {
+      return;
+    }
+
     refreshFleetHealth();
     refreshMaintenanceRisk();
 
@@ -355,7 +363,7 @@ export default function App() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [refreshFleetHealth, refreshMaintenanceRisk]);
+  }, [loading, error, refreshFleetHealth, refreshMaintenanceRisk]);
 
   /*
    * Update time series immediately when the selected station changes.
@@ -363,7 +371,7 @@ export default function App() {
    * This avoids waiting up to 2 seconds for the next polling cycle.
    */
   useEffect(() => {
-    if (!selectedStationId) {
+    if (loading || error || !selectedStationId) {
       return;
     }
 
@@ -388,7 +396,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedStationId]);
+  }, [loading, error, selectedStationId]);
 
   const handleStationClick = useCallback((id: string) => {
     setSelectedStationId(id);
