@@ -209,6 +209,7 @@ class StationService {
   private cachedStations: Station[] = [];
   private cachedAlerts: AlertRecord[] = [];
   private cachedFleetHealth: BackendStationHealth[] = [];
+  private stationsRequest: Promise<Station[]> | null = null;
   private fleetHealthRequest: Promise<BackendStationHealth[]> | null = null;
 
   private mapHealthStatus(status: string): StationStatus {
@@ -290,6 +291,20 @@ class StationService {
    * Fetches authoritative station metadata from GET /stations and combines with GET /stations/latest.
    */
   async getStations(): Promise<Station[]> {
+    if (this.stationsRequest) {
+      return this.stationsRequest;
+    }
+
+    this.stationsRequest = this.refreshStations();
+
+    try {
+      return await this.stationsRequest;
+    } finally {
+      this.stationsRequest = null;
+    }
+  }
+
+  private async refreshStations(): Promise<Station[]> {
     let backendStations: BackendStationMeta[] = [];
     try {
       backendStations = await apiFetch<BackendStationMeta[]>('/stations');
@@ -315,7 +330,7 @@ class StationService {
     }
 
     const healthByStation = new Map(
-      this.cachedFleetHealth.map((health) => [health.station_id, health]),
+      this.cachedFleetHealth.map((health) => [toBackendStationId(health.station_id), health]),
     );
 
     const mappedStations: Station[] = backendStations.map((b) => {
