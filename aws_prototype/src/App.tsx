@@ -75,6 +75,7 @@ export default function App() {
    * expected, another polling cycle will not start on top of it.
    */
   const liveRefreshInProgress = useRef(false);
+  const healthRefreshInProgress = useRef(false);
 
     /*
    * Maintenance risk is intentionally refreshed much less frequently
@@ -99,35 +100,29 @@ export default function App() {
         summ,
         altList,
         anomList,
-        health,
         act,
         qual,
         model,
         scen,
-        maintenanceFleet,
       ] = await Promise.all([
         stationService.getStations(),
         stationService.getNetworkSummary(),
         stationService.getAlerts(),
         stationService.getAnomalies(),
-        stationService.getSensorHealthList(),
         stationService.getActivityEvents(),
         stationService.getDataQuality(),
         stationService.getModelStatus(),
         stationService.getSimulationScenarios(),
-        stationService.getMaintenanceRiskFleet(),
       ]);
 
       setStations(stList);
       setNetworkSummary(summ);
       setAlerts(altList);
       setAnomalies(anomList);
-      setSensorHealthList(health);
       setActivityEvents(act);
       setDataQuality(qual);
       setModelStatus(model);
       setScenarios(scen);
-      setMaintenanceRisk(maintenanceFleet.stations || []);
 
       const targetId = stList.some(
         (station) => station.id === selectedStationId,
@@ -141,7 +136,6 @@ export default function App() {
 
       const ts = await stationService.getTimeSeries(targetId, 24);
       setTimeSeries(ts);
-      setMaintenanceRisk(maintenanceFleet.stations || []);
     } catch (err: any) {
       console.error(
         'Failed to reach SkyGuardAI backend:',
@@ -177,7 +171,6 @@ export default function App() {
         summ,
         altList,
         anomList,
-        health,
         act,
         qual,
         ts,
@@ -186,7 +179,6 @@ export default function App() {
         stationService.getNetworkSummary(),
         stationService.getAlerts(),
         stationService.getAnomalies(),
-        stationService.getSensorHealthList(),
         stationService.getActivityEvents(),
         stationService.getDataQuality(),
         selectedStationId
@@ -205,7 +197,6 @@ export default function App() {
       setNetworkSummary(summ);
       setAlerts(altList);
       setAnomalies(anomList);
-      setSensorHealthList(health);
       setActivityEvents(act);
       setDataQuality(qual);
       setTimeSeries(ts);
@@ -274,6 +265,45 @@ export default function App() {
   }, []);
 
   /*
+   * SLOW FLEET-HEALTH POLLING
+   *
+   * Fleet health is computationally heavier than live telemetry and does
+   * not require 2-second resolution. Refresh the backend fleet-health
+   * snapshot once per minute, then update the dashboard's station health
+   * and sensor-health views from the successful cached result.
+   */
+  const refreshFleetHealth = useCallback(async () => {
+    if (healthRefreshInProgress.current) {
+      return;
+    }
+
+    healthRefreshInProgress.current = true;
+
+    try {
+      await stationService.refreshFleetHealth();
+
+      const [health, stList] = await Promise.all([
+        stationService.getSensorHealthList(),
+        stationService.getStations(),
+      ]);
+
+      setSensorHealthList(health);
+      setStations(stList);
+    } catch (err) {
+      /*
+       * Keep the previous successful fleet-health state if a background
+       * refresh temporarily fails.
+       */
+      console.warn(
+        'Fleet-health refresh failed:',
+        err,
+      );
+    } finally {
+      healthRefreshInProgress.current = false;
+    }
+  }, []);
+
+  /*
    * Initial load.
    */
   useEffect(() => {
@@ -291,7 +321,7 @@ export default function App() {
    *   - network summary
    *   - anomaly alerts
    *   - anomaly intelligence
-   *   - sensor health
+   *   - latest station health state from the cached fleet-health snapshot
    *   - activity feed
    *   - data quality
    *   - selected station graph
@@ -307,21 +337,25 @@ export default function App() {
   }, [refreshLiveData]);
 
   /*
-   * SLOW MAINTENANCE-RISK POLLING
+   * SLOW BACKGROUND POLLING
    *
-   * Maintenance prioritization does not require 2-second resolution.
-   * Refresh it once per minute to avoid unnecessary backend/database
-   * contention while keeping the dashboard reasonably current.
+   * Fleet health and maintenance prioritization do not require 2-second
+   * resolution. Refresh both once per minute to avoid unnecessary
+   * backend/database contention while keeping the dashboard current.
    */
   useEffect(() => {
+    refreshFleetHealth();
+    refreshMaintenanceRisk();
+
     const intervalId = window.setInterval(() => {
+      refreshFleetHealth();
       refreshMaintenanceRisk();
     }, MAINTENANCE_REFRESH_MS);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [refreshMaintenanceRisk]);
+  }, [refreshFleetHealth, refreshMaintenanceRisk]);
 
   /*
    * Update time series immediately when the selected station changes.

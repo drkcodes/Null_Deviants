@@ -208,6 +208,7 @@ async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> 
 class StationService {
   private cachedStations: Station[] = [];
   private cachedAlerts: AlertRecord[] = [];
+  private cachedFleetHealth: BackendStationHealth[] = [];
   private fleetHealthRequest: Promise<BackendStationHealth[]> | null = null;
 
   private mapHealthStatus(status: string): StationStatus {
@@ -313,9 +314,8 @@ class StationService {
       }
     }
 
-    const fleetHealth = await this.getFleetHealth();
     const healthByStation = new Map(
-      fleetHealth.map((health) => [toBackendStationId(health.station_id), health]),
+      this.cachedFleetHealth.map((health) => [health.station_id, health]),
     );
 
     const mappedStations: Station[] = backendStations.map((b) => {
@@ -674,13 +674,25 @@ class StationService {
   }
 
   async getFleetHealth(): Promise<BackendStationHealth[]> {
+    if (this.cachedFleetHealth.length > 0) {
+      return this.cachedFleetHealth;
+    }
+
+    return this.refreshFleetHealth();
+  }
+
+  async refreshFleetHealth(): Promise<BackendStationHealth[]> {
     if (!this.fleetHealthRequest) {
       this.fleetHealthRequest = apiFetch<BackendFleetHealth>('/stations/health')
-        .then((response) => response.stations)
+        .then((response) => {
+          this.cachedFleetHealth = response.stations;
+          return this.cachedFleetHealth;
+        })
         .finally(() => {
           this.fleetHealthRequest = null;
         });
     }
+
     return this.fleetHealthRequest;
   }
 
