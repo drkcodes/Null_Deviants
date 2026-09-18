@@ -5,6 +5,8 @@ import numpy as np
 import joblib
 import logging
 import shap
+import threading
+import time as _time
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -4043,6 +4045,25 @@ stations_df = pd.read_csv(
 )
 
 
+# ============================================================
+# IN-MEMORY TTL CACHES
+#
+# These wrap the expensive fleet-health and maintenance-risk
+# computations. The computations themselves are unchanged.
+# Only the endpoint delivery layer is optimised.
+# ============================================================
+
+_FLEET_HEALTH_TTL: float = 60.0
+_fleet_health_cache: dict | None = None
+_fleet_health_cache_ts: float = 0.0
+_fleet_health_cache_lock = threading.Lock()
+
+_MAINTENANCE_RISK_TTL: float = 60.0
+_maintenance_risk_cache: list | None = None
+_maintenance_risk_cache_ts: float = 0.0
+_maintenance_risk_cache_lock = threading.Lock()
+
+
 @app.get("/station/{station_id}/health")
 def station_health(station_id: str):
     known_station_ids = set(stations_df["station_id"].astype(str))
@@ -4066,89 +4087,119 @@ def station_health(station_id: str):
 
 @app.get("/stations/health")
 def stations_health():
-    station_ids = stations_df["station_id"].astype(str).tolist()
-    history_rows = get_station_feature_history_batch(
-        station_ids,
-        limit=672,
-    )
-    anomaly_rows = get_live_anomaly_history(station_ids)
+    global _fleet_health_cache, _fleet_health_cache_ts
 
-    histories_by_station = {station_id: [] for station_id in station_ids}
-    for row in history_rows:
-        histories_by_station.setdefault(str(row["station_id"]), []).append(row)
+    # ----------------------------------------------------------
+    # Fast path: return cached result if still fresh.
+    # ----------------------------------------------------------
+    now_ts = _time.monotonic()
+    if (
+        _fleet_health_cache is not None
+        and (now_ts - _fleet_health_cache_ts) < _FLEET_HEALTH_TTL
+    ):
+        return _fleet_health_cache
 
-    anomalies_by_station = {station_id: [] for station_id in station_ids}
-    for row in anomaly_rows:
-        anomalies_by_station.setdefault(str(row["station_id"]), []).append(row)
+    # ----------------------------------------------------------
+    # Slow path: acquire lock and recompute.
+    # Double-checked to prevent duplicate concurrent computations.
+    # ----------------------------------------------------------
+    with _fleet_health_cache_lock:
+        now_ts = _time.monotonic()
+        if (
+            _fleet_health_cache is not None
+            and (now_ts - _fleet_health_cache_ts) < _FLEET_HEALTH_TTL
+        ):
+            return _fleet_health_cache
 
-    latest_by_station = {}
-    for station_id, rows in histories_by_station.items():
-        if rows:
-            latest_by_station[station_id] = max(
-                rows,
-                key=lambda row: _health_timestamp(row.get("timestamp"))
-                or pd.Timestamp.min.tz_localize("Asia/Kolkata"),
-            )
+        station_ids = stations_df["station_id"].astype(str).tolist()
+        history_rows = get_station_feature_history_batch(
+            station_ids,
+            limit=672,
+        )
+        anomaly_rows = get_live_anomaly_history(station_ids)
 
-    contexts_by_timestamp = {}
-    for station_id, latest in latest_by_station.items():
-        timestamp = _health_timestamp(latest.get("timestamp"))
-        if timestamp is None:
-            continue
-        contexts_by_timestamp.setdefault(timestamp, []).append({
-            "station_id": station_id,
-            "timestamp": timestamp,
-            "temperature_c": latest.get("temperature_c"),
-            "relative_humidity_pct": latest.get("relative_humidity_pct"),
-            "pressure_hpa": latest.get("pressure_hpa"),
-        })
+        histories_by_station = {station_id: [] for station_id in station_ids}
+        for row in history_rows:
+            histories_by_station.setdefault(str(row["station_id"]), []).append(row)
 
-    previous_contexts_by_timestamp = {}
-    for rows in histories_by_station.values():
-        for row in rows:
-            timestamp = _health_timestamp(row.get("timestamp"))
+        anomalies_by_station = {station_id: [] for station_id in station_ids}
+        for row in anomaly_rows:
+            anomalies_by_station.setdefault(str(row["station_id"]), []).append(row)
+
+        latest_by_station = {}
+        for station_id, rows in histories_by_station.items():
+            if rows:
+                latest_by_station[station_id] = max(
+                    rows,
+                    key=lambda row: _health_timestamp(row.get("timestamp"))
+                    or pd.Timestamp.min.tz_localize("Asia/Kolkata"),
+                )
+
+        contexts_by_timestamp = {}
+        for station_id, latest in latest_by_station.items():
+            timestamp = _health_timestamp(latest.get("timestamp"))
             if timestamp is None:
                 continue
-            previous_contexts_by_timestamp.setdefault(timestamp, []).append({
-                "station_id": row.get("station_id"),
+            contexts_by_timestamp.setdefault(timestamp, []).append({
+                "station_id": station_id,
                 "timestamp": timestamp,
-                "temperature_c": row.get("temperature_c"),
-                "relative_humidity_pct": row.get("relative_humidity_pct"),
-                "pressure_hpa": row.get("pressure_hpa"),
+                "temperature_c": latest.get("temperature_c"),
+                "relative_humidity_pct": latest.get("relative_humidity_pct"),
+                "pressure_hpa": latest.get("pressure_hpa"),
             })
 
-    results = []
-    for station_id in station_ids:
-        latest = latest_by_station.get(station_id)
-        timestamp = (
-            _health_timestamp(latest.get("timestamp"))
-            if latest is not None
-            else None
-        )
-        results.append(
-            _calculate_station_health(
-                station_id,
-                histories_by_station.get(station_id, []),
-                anomalies_by_station.get(station_id, []),
-                current_context=(
-                    contexts_by_timestamp.get(timestamp)
-                    if timestamp is not None
-                    else []
-                ),
-                previous_context=(
-                    previous_contexts_by_timestamp.get(
-                        timestamp - pd.Timedelta(minutes=15)
-                    )
-                    if timestamp is not None
-                    else []
-                ),
-            )
-        )
+        previous_contexts_by_timestamp = {}
+        for rows in histories_by_station.values():
+            for row in rows:
+                timestamp = _health_timestamp(row.get("timestamp"))
+                if timestamp is None:
+                    continue
+                previous_contexts_by_timestamp.setdefault(timestamp, []).append({
+                    "station_id": row.get("station_id"),
+                    "timestamp": timestamp,
+                    "temperature_c": row.get("temperature_c"),
+                    "relative_humidity_pct": row.get("relative_humidity_pct"),
+                    "pressure_hpa": row.get("pressure_hpa"),
+                })
 
-    return {
-        "stations": results,
-        "station_count": len(results),
-    }
+        results = []
+        for station_id in station_ids:
+            latest = latest_by_station.get(station_id)
+            timestamp = (
+                _health_timestamp(latest.get("timestamp"))
+                if latest is not None
+                else None
+            )
+            results.append(
+                _calculate_station_health(
+                    station_id,
+                    histories_by_station.get(station_id, []),
+                    anomalies_by_station.get(station_id, []),
+                    current_context=(
+                        contexts_by_timestamp.get(timestamp)
+                        if timestamp is not None
+                        else []
+                    ),
+                    previous_context=(
+                        previous_contexts_by_timestamp.get(
+                            timestamp - pd.Timedelta(minutes=15)
+                        )
+                        if timestamp is not None
+                        else []
+                    ),
+                )
+            )
+
+        response = {
+            "stations": results,
+            "station_count": len(results),
+        }
+
+        # Store successful result in cache.
+        _fleet_health_cache = response
+        _fleet_health_cache_ts = _time.monotonic()
+
+        return response
 
 def _maintenance_health_anchor(
     station_id,
@@ -4382,9 +4433,41 @@ def _build_maintenance_risk_results():
 
     return rank_maintenance_results(current_results)
 
+def _get_maintenance_risk_results() -> list:
+    """
+    Return maintenance-risk fleet results, using a short TTL cache
+    to avoid redundant full-fleet recomputations within the same
+    polling window.
+
+    The computation in _build_maintenance_risk_results() is unchanged.
+    Only the delivery layer is optimised.
+    """
+    global _maintenance_risk_cache, _maintenance_risk_cache_ts
+
+    now_ts = _time.monotonic()
+    if (
+        _maintenance_risk_cache is not None
+        and (now_ts - _maintenance_risk_cache_ts) < _MAINTENANCE_RISK_TTL
+    ):
+        return _maintenance_risk_cache
+
+    with _maintenance_risk_cache_lock:
+        now_ts = _time.monotonic()
+        if (
+            _maintenance_risk_cache is not None
+            and (now_ts - _maintenance_risk_cache_ts) < _MAINTENANCE_RISK_TTL
+        ):
+            return _maintenance_risk_cache
+
+        results = _build_maintenance_risk_results()
+        _maintenance_risk_cache = results
+        _maintenance_risk_cache_ts = _time.monotonic()
+        return results
+
+
 @app.get("/stations/maintenance-risk")
 def stations_maintenance_risk():
-    results = _build_maintenance_risk_results()
+    results = _get_maintenance_risk_results()
 
     ranked_count = sum(
         result.get("maintenance_risk") is not None
@@ -4402,6 +4485,7 @@ def stations_maintenance_risk():
         "index_definition": "deterministic_maintenance_risk_v1",
     }
 
+
 @app.get("/station/{station_id}/maintenance-risk")
 def station_maintenance_risk(station_id: str):
     known_station_ids = set(
@@ -4414,7 +4498,8 @@ def station_maintenance_risk(station_id: str):
             detail=f"Unknown station: {station_id}",
         )
 
-    results = _build_maintenance_risk_results()
+    # Reuse the cached fleet result instead of rebuilding the full fleet.
+    results = _get_maintenance_risk_results()
 
     for result in results:
         if str(result.get("station_id")) == station_id:

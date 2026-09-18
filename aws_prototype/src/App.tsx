@@ -13,7 +13,7 @@ import {
   TelemetryPoint,
   MaintenanceRiskResult,
 } from './types';
-import { API_BASE_URL, stationService } from './lib/api/stationService';import { Sidebar } from './components/layout/Sidebar';
+import { API_BASE_URL, stationService } from './lib/api/stationService'; import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { PageHeader } from './components/common/PageHeader';
 import { AlertCircle, RefreshCw } from 'lucide-react';
@@ -77,11 +77,11 @@ export default function App() {
   const liveRefreshInProgress = useRef(false);
   const healthRefreshInProgress = useRef(false);
 
-    /*
-   * Maintenance risk is intentionally refreshed much less frequently
-   * than live telemetry. The Phase 8 engine is computationally heavier
-   * and maintenance priority does not need 2-second resolution.
-   */
+  /*
+ * Maintenance risk is intentionally refreshed much less frequently
+ * than live telemetry. The Phase 8 engine is computationally heavier
+ * and maintenance priority does not need 2-second resolution.
+ */
   const maintenanceRefreshInProgress = useRef(false);
 
   /*
@@ -136,6 +136,26 @@ export default function App() {
 
       const ts = await stationService.getTimeSeries(targetId, 24);
       setTimeSeries(ts);
+
+      /*
+       * Fire-and-forget fleet-health pre-load.
+       *
+       * This starts the slow /stations/health request immediately after the
+       * dashboard renders rather than waiting for the first 60-second
+       * background interval. The dashboard loading screen is NOT blocked —
+       * if the request is still running or fails, the rest of the UI remains
+       * fully usable and the normal background poll will retry.
+       *
+       * refreshFleetHealth() uses the existing deduplication guard so a
+       * concurrent background-poll call will share the same in-flight request.
+       */
+      stationService.refreshFleetHealth()
+        .then(() => stationService.getSensorHealthList())
+        .then((health) => setSensorHealthList(health))
+        .then(() => stationService.getStations().then((s) => setStations(s)))
+        .catch(() => {
+          // Silently ignore — the 60-second background poll will retry.
+        });
     } catch (err: any) {
       console.error(
         'Failed to reach SkyGuardAI backend:',
@@ -144,7 +164,7 @@ export default function App() {
 
       setError(
         err?.message ||
-          'Unable to reach SkyGuardAI backend',
+        'Unable to reach SkyGuardAI backend',
       );
     } finally {
       setLoading(false);
@@ -183,9 +203,9 @@ export default function App() {
         stationService.getDataQuality(),
         selectedStationId
           ? stationService.getTimeSeries(
-              selectedStationId,
-              24,
-            )
+            selectedStationId,
+            24,
+          )
           : Promise.resolve([]),
       ]);
 

@@ -169,21 +169,27 @@ export interface BackendPredictionResponse {
 /**
  * Centralized HTTP request helper with timeout and error diagnostics
  */
-async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
+async function apiFetch<T>(endpoint: string, options?: RequestInit & { timeoutMs?: number }): Promise<T> {
   const cleanBase = API_BASE_URL.replace(/\/+$/, '');
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${cleanBase}${cleanEndpoint}`;
 
+  // Allow individual call-sites to override the timeout for slow endpoints.
+  // All ordinary endpoints retain the existing 20-second default.
+  const timeoutMs = options?.timeoutMs ?? 20000;
+
+  const { timeoutMs: _ignored, ...fetchOptions } = options ?? {};
+
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(url, {
-      ...options,
+      ...fetchOptions,
       signal: controller.signal,
       headers: {
         Accept: 'application/json',
-        ...(options?.headers || {}),
+        ...(fetchOptions?.headers || {}),
       },
     });
 
@@ -698,7 +704,9 @@ class StationService {
 
   async refreshFleetHealth(): Promise<BackendStationHealth[]> {
     if (!this.fleetHealthRequest) {
-      this.fleetHealthRequest = apiFetch<BackendFleetHealth>('/stations/health')
+      // Fleet health computation is heavyweight (35-40 s in production).
+      // Use an extended timeout so the backend cache can warm on first call.
+      this.fleetHealthRequest = apiFetch<BackendFleetHealth>('/stations/health', { timeoutMs: 90000 })
         .then((response) => {
           this.cachedFleetHealth = response.stations;
           return this.cachedFleetHealth;
@@ -784,21 +792,20 @@ class StationService {
 
   /**
    * Real ML model status info for the two-stage random forest architecture.
+   * Uses apiFetch so it shares the same timeout and error-handling as all
+   * other endpoints. The backend intentionally returns "Not available" for
+   * persisted accuracy/F1 — this is preserved unchanged.
    */
   async getModelStatus(): Promise<ModelStatusInfo> {
-    const response = await fetch(`${API_BASE_URL}/model/status`);
-
-    if (!response.ok) {
-        throw new Error(`Failed to fetch model status: ${response.status}`);
-    }
-
-    return await response.json();
-}
+    return apiFetch<ModelStatusInfo>('/model/status');
+  }
 
 
   /** Fetches deterministic Phase 8 maintenance-risk ranking for the full fleet. */
   async getMaintenanceRiskFleet(): Promise<MaintenanceRiskFleet> {
-    return apiFetch<MaintenanceRiskFleet>('/stations/maintenance-risk');
+    // Maintenance-risk computation is heavyweight (30-35 s in production).
+    // Use an extended timeout; the backend TTL cache keeps subsequent calls fast.
+    return apiFetch<MaintenanceRiskFleet>('/stations/maintenance-risk', { timeoutMs: 90000 });
   }
 
   /** Fetches deterministic Phase 8 maintenance risk for one station. */
@@ -874,6 +881,8 @@ class StationService {
     scenarioId: string,
     intensity: number = 85,
   ): Promise<SimulationResult> {
+    // Simulation performs the full validated feature/network/ML pipeline.
+    // Use an extended timeout — the backend succeeds but needs up to 60 s.
     const response = await apiFetch<any>('/simulate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -882,6 +891,7 @@ class StationService {
         scenario_id: scenarioId,
         intensity,
       }),
+      timeoutMs: 90000,
     });
 
     if (!response || response.error) {
