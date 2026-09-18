@@ -4164,18 +4164,18 @@ def _maintenance_health_anchor(
 
     eligible = []
     for row in history_rows or []:
-        timestamp = _health_timestamp(row.get("timestamp"))
+        timestamp = row.get("timestamp")
+
+        if timestamp is None:
+            timestamp = _health_timestamp(row.get("timestamp"))
+
         if timestamp is not None and timestamp <= target:
             eligible.append(row)
 
     if not eligible:
         return None
 
-    latest = max(
-        eligible,
-        key=lambda row: _health_timestamp(row.get("timestamp"))
-        or pd.Timestamp.min.tz_localize("Asia/Kolkata"),
-    )
+    latest = eligible[-1]
 
     actual_timestamp = _health_timestamp(latest.get("timestamp"))
     if actual_timestamp is None:
