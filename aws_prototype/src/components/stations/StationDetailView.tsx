@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Station, StationSensorHealth, AnomalyRecord, TelemetryPoint, MaintenanceRiskResult } from '../../types';
 import { stationService } from '../../lib/api/stationService';
 import { StatusBadge, CauseBadge, SeverityBadge, ChannelBadge } from '../common/Badges';
@@ -27,6 +27,15 @@ interface StationDetailViewProps {
   onSelectAnomaly: (anomaly: AnomalyRecord) => void;
 }
 
+const HISTORY_REFRESH_MS = 60_000;
+
+function timeRangeToHours(timeRange: '1h' | '6h' | '24h' | '7d'): number {
+  if (timeRange === '1h') return 1;
+  if (timeRange === '6h') return 6;
+  if (timeRange === '7d') return 168;
+  return 24;
+}
+
 export const StationDetailView: React.FC<StationDetailViewProps> = ({
   stationId,
   onBack,
@@ -41,20 +50,26 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
   const [maintenanceRisk, setMaintenanceRisk] = useState<MaintenanceRiskResult | null>(null);
   const [timeRange, setTimeRange] = useState<'1h' | '6h' | '24h' | '7d'>('24h');
   const [loading, setLoading] = useState(true);
+  const timeSeriesRefreshInProgress = useRef(false);
+
+  const fetchTimeSeries = useCallback(() => {
+    return stationService.getTimeSeries(
+      stationId,
+      timeRangeToHours(timeRange),
+    );
+  }, [stationId, timeRange]);
 
   useEffect(() => {
     async function loadData() {
       setLoading(true);
       try {
-        const s = await stationService.getStationById(stationId).catch(() => undefined);
-        const h = await stationService.getStationSensorHealth(stationId).catch(() => undefined);
-        const all = await stationService.getStations().catch(() => []);
-        const anos = await stationService.getAnomalies({ search: stationId }).catch(() => []);
-        const risk = await stationService.getStationMaintenanceRisk(stationId).catch(() => null);
-        const ts = await stationService.getTimeSeries(
-          stationId,
-          timeRange === '1h' ? 1 : timeRange === '6h' ? 6 : timeRange === '7d' ? 168 : 24,
-        ).catch(() => []);
+        const [s, h, all, anos, risk] = await Promise.all([
+          stationService.getStationById(stationId).catch(() => undefined),
+          stationService.getStationSensorHealth(stationId).catch(() => undefined),
+          stationService.getStations().catch(() => []),
+          stationService.getAnomalies({ search: stationId }).catch(() => []),
+          stationService.getStationMaintenanceRisk(stationId).catch(() => null),
+        ]);
 
         if (!s) {
           throw new Error(`Station ${stationId} was not returned by the SkyGuardAI backend.`);
@@ -64,7 +79,6 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
         if (h) setHealth(h);
         setAllStations(all || []);
         setAnomalies(anos || []);
-        setTimeSeries(ts || []);
         setMaintenanceRisk(risk);
       } catch (err) {
         console.error('Error loading station detail:', err);
@@ -73,7 +87,48 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
       }
     }
     loadData();
-  }, [stationId, timeRange]);
+  }, [stationId]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function refreshTimeSeries() {
+      if (!isActive) {
+        return;
+      }
+
+      if (timeSeriesRefreshInProgress.current) {
+        return;
+      }
+
+      timeSeriesRefreshInProgress.current = true;
+
+      try {
+        const ts = await fetchTimeSeries();
+        if (isActive) {
+          setTimeSeries(ts || []);
+        }
+      } catch (err) {
+        if (isActive) {
+          console.warn('Station detail history refresh failed:', err);
+        }
+      } finally {
+        timeSeriesRefreshInProgress.current = false;
+      }
+    }
+
+    refreshTimeSeries();
+
+    const intervalId = window.setInterval(
+      refreshTimeSeries,
+      HISTORY_REFRESH_MS,
+    );
+
+    return () => {
+      isActive = false;
+      window.clearInterval(intervalId);
+    };
+  }, [fetchTimeSeries]);
 
   if (loading || !station) {
     return (
