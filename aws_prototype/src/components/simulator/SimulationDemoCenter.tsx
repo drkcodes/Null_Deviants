@@ -32,8 +32,10 @@ export const SimulationDemoCenter: React.FC<SimulationDemoCenterProps> = ({
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>(scenarios[0]?.id || 'scen-temp-spike');
   const [intensity, setIntensity] = useState<number>(85);
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [isLiveRunning, setIsLiveRunning] = useState<boolean>(false);
   const [activeStepIndex, setActiveStepIndex] = useState<number>(-1);
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
+  const [liveResult, setLiveResult] = useState<any | null>(null);
 
   const selectedStation = stations.find((s) => s.id === selectedStationId) || stations[0];
   const selectedScenario = scenarios.find((s) => s.id === selectedScenarioId) || scenarios[0];
@@ -101,6 +103,7 @@ export const SimulationDemoCenter: React.FC<SimulationDemoCenterProps> = ({
 
     setIsRunning(true);
     setSimResult(null);
+    setLiveResult(null);
     setActiveStepIndex(-1);
 
     try {
@@ -145,10 +148,45 @@ export const SimulationDemoCenter: React.FC<SimulationDemoCenterProps> = ({
     }
   };
 
+  const handleRunLiveScenario = async () => {
+    if (isRunning || isLiveRunning) return;
+
+    setIsLiveRunning(true);
+    setLiveResult(null);
+
+    try {
+      const result = await stationService.runLiveScenario(
+        selectedStationId,
+        selectedScenarioId,
+        intensity,
+      );
+
+      setLiveResult(result);
+    } catch (error) {
+      console.error(
+        'Live Pipeline Scenario failed:',
+        error,
+      );
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Live scenario failed.';
+
+      window.alert(
+        `SkyGuardAI live scenario failed:\n\n${message}`,
+      );
+    } finally {
+      setIsLiveRunning(false);
+    }
+  };
+
   const handleReset = () => {
     setActiveStepIndex(-1);
     setSimResult(null);
+    setLiveResult(null);
     setIsRunning(false);
+    setIsLiveRunning(false);
   };
 
   return (
@@ -180,7 +218,7 @@ export const SimulationDemoCenter: React.FC<SimulationDemoCenterProps> = ({
             <select
               value={selectedStationId}
               onChange={(e) => setSelectedStationId(e.target.value)}
-              disabled={isRunning}
+              disabled={isRunning || isLiveRunning}
               className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
               {stations.map((st) => (
@@ -208,7 +246,7 @@ export const SimulationDemoCenter: React.FC<SimulationDemoCenterProps> = ({
             <select
               value={selectedScenarioId}
               onChange={(e) => setSelectedScenarioId(e.target.value)}
-              disabled={isRunning}
+              disabled={isRunning || isLiveRunning}
               className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
               <optgroup label="Sensor Hardware Faults">
@@ -246,7 +284,7 @@ export const SimulationDemoCenter: React.FC<SimulationDemoCenterProps> = ({
                 max="100"
                 value={intensity}
                 onChange={(e) => setIntensity(Number(e.target.value))}
-                disabled={isRunning}
+                disabled={isRunning || isLiveRunning}
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
               />
             </div>
@@ -255,17 +293,27 @@ export const SimulationDemoCenter: React.FC<SimulationDemoCenterProps> = ({
               <button
                 type="button"
                 onClick={handleRunSimulation}
-                disabled={isRunning}
+                disabled={isRunning || isLiveRunning}
                 className="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
               >
                 <Play className={`w-3.5 h-3.5 ${isRunning ? 'animate-spin' : ''}`} />
-                <span>{isRunning ? 'Processing Pipeline...' : 'Run Simulation'}</span>
+                <span>{isRunning ? 'Processing Pipeline...' : 'Benchmark Simulation'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRunLiveScenario}
+                disabled={isRunning || isLiveRunning}
+                className="flex-1 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+              >
+                <Radio className={`w-3.5 h-3.5 ${isLiveRunning ? 'animate-pulse' : ''}`} />
+                <span>{isLiveRunning ? 'Posting Live Batch...' : 'Live Pipeline Scenario'}</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleReset}
-                disabled={isRunning}
+                disabled={isRunning || isLiveRunning}
                 className="p-2 border border-slate-300 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
                 title="Reset simulation"
               >
@@ -275,6 +323,29 @@ export const SimulationDemoCenter: React.FC<SimulationDemoCenterProps> = ({
           </div>
         </div>
       </div>
+
+      {liveResult && (
+        <div className="bg-white rounded-lg border border-emerald-200 p-4 shadow-xs text-xs">
+          <div className="flex items-center gap-2 text-emerald-700 font-bold">
+            <FileCheck className="w-4 h-4" />
+            Live Pipeline Scenario Ingested
+          </div>
+          <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono">
+            <div>
+              <span className="text-slate-500">Timestamp:</span>{' '}
+              <span className="font-bold text-slate-900">{liveResult.ingest?.timestamp}</span>
+            </div>
+            <div>
+              <span className="text-slate-500">Stations:</span>{' '}
+              <span className="font-bold text-slate-900">{liveResult.ingest?.stations_processed}</span>
+            </div>
+            <div>
+              <span className="text-slate-500">Affected:</span>{' '}
+              <span className="font-bold text-slate-900">{liveResult.scenario?.affected_station_count}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Visual Pipeline Flow */}
       <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-xs">

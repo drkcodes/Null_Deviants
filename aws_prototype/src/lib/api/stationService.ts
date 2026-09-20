@@ -978,6 +978,29 @@ const stage2Cause: AnomalyCause =
     };
   }
 
+  async runLiveScenario(
+    stationId: string,
+    scenarioId: string,
+    intensity: number = 85,
+  ): Promise<any> {
+    const response = await apiFetch<any>('/live-scenario', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        station_id: toBackendStationId(stationId),
+        scenario_id: scenarioId,
+        intensity,
+      }),
+      timeoutMs: 90000,
+    });
+
+    if (!response || response.error) {
+      throw new Error(response?.error || 'Live scenario failed in backend.');
+    }
+
+    return response;
+  }
+
   /**
    * Resets the backend database to empty state via POST /reset.
    */

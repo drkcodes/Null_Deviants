@@ -28,6 +28,11 @@ from pathlib import Path
 import pandas as pd
 import requests
 
+from live_scenarios import (
+    apply_live_scenario,
+    station_regions_from_rows,
+)
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,6 +41,8 @@ DATASET_PATH = (
     / "ML training"
     / "SIH26073_AP_AWS_observations.csv"
 )
+
+STATIONS_PATH = PROJECT_ROOT / "BACKEND" / "stations.csv"
 
 DEFAULT_BACKEND_URL = "http://127.0.0.1:8000"
 
@@ -110,6 +117,17 @@ def load_station_profiles() -> list[StationProfile]:
         )
 
     return profiles
+
+
+def load_station_regions() -> dict[str, str]:
+    stations = pd.read_csv(
+        STATIONS_PATH,
+        usecols=["station_id", "region"],
+    )
+
+    return station_regions_from_rows(
+        stations.to_dict("records")
+    )
 
 
 def initialize_states_from_profiles(
@@ -458,6 +476,42 @@ def parse_args() -> argparse.Namespace:
         ),
     )
 
+    parser.add_argument(
+        "--scenario-id",
+        type=str,
+        default=None,
+        help=(
+            "Inject a live raw-telemetry scenario into the next "
+            "batch. Example: scen-temp-spike"
+        ),
+    )
+
+    parser.add_argument(
+        "--station-id",
+        type=str,
+        default=None,
+        help=(
+            "Target station for --scenario-id. Example: AWS_AP07"
+        ),
+    )
+
+    parser.add_argument(
+        "--scenario-batches",
+        type=int,
+        default=1,
+        help=(
+            "Number of consecutive batches to perturb when "
+            "--scenario-id is active."
+        ),
+    )
+
+    parser.add_argument(
+        "--intensity",
+        type=int,
+        default=85,
+        help="Live scenario perturbation intensity from 0 to 100.",
+    )
+
     return parser.parse_args()
 
 
@@ -469,13 +523,34 @@ def main() -> None:
             "Interval must be greater than zero"
         )
 
+    if args.scenario_id and not args.station_id:
+        raise ValueError(
+            "--scenario-id requires --station-id"
+        )
+
+    if args.scenario_batches <= 0:
+        raise ValueError(
+            "--scenario-batches must be greater than zero"
+        )
+
+    if args.intensity < 0 or args.intensity > 100:
+        raise ValueError(
+            "--intensity must be between 0 and 100"
+        )
+
     rng = random.Random(args.seed)
 
     profiles = load_station_profiles()
+    station_regions = load_station_regions()
     profile_by_station = {
         profile.station_id: profile
         for profile in profiles
     }
+    scenario_batches_remaining = (
+        args.scenario_batches
+        if args.scenario_id
+        else 0
+    )
 
     explicit_start = parse_start_timestamp(
         args.start_time
@@ -519,6 +594,10 @@ def main() -> None:
     print(f"Dry run        : {args.dry_run}")
     print(f"Seed           : {args.seed}")
     print(f"Dataset        : {DATASET_PATH}")
+    print(f"Scenario       : {args.scenario_id or 'none'}")
+    if args.scenario_id:
+        print(f"Scenario target: {args.station_id}")
+        print(f"Scenario batches: {args.scenario_batches}")
     print()
 
     if args.dry_run and explicit_start is None:
@@ -543,14 +622,48 @@ def main() -> None:
                 latest_timestamp,
             )
 
-        readings = build_batch(
-            profiles,
-            states,
-            next_timestamp,
-            rng,
-        )
+        previous_states = {
+            station_id: StationState(
+                temperature=state.temperature,
+                humidity=state.humidity,
+                pressure=state.pressure,
+            )
+            for station_id, state in states.items()
+        }
+
+        try:
+            readings = build_batch(
+                profiles,
+                states,
+                next_timestamp,
+                rng,
+            )
+
+            scenario_meta = None
+
+            if scenario_batches_remaining > 0:
+                readings, scenario_meta = apply_live_scenario(
+                    readings=readings,
+                    scenario_id=args.scenario_id,
+                    target_station_id=args.station_id,
+                    intensity=args.intensity,
+                    station_regions=station_regions,
+                )
+
+        except Exception:
+            states = previous_states
+            raise
 
         print_batch(readings)
+
+        if scenario_meta is not None:
+            print()
+            print("LIVE SCENARIO INJECTION")
+            print(
+                f"scenario={scenario_meta['scenario_id']} | "
+                f"target={scenario_meta['target_station_id']} | "
+                f"affected={scenario_meta['affected_station_count']}"
+            )
 
         if args.dry_run:
             print("\nDRY RUN: batch was not sent.")
@@ -568,7 +681,24 @@ def main() -> None:
                     f"{result.get('stations_processed')}"
                 )
 
+                for reading in readings:
+                    states[reading["station_id"]] = StationState(
+                        temperature=float(
+                            reading["temperature_c"]
+                        ),
+                        humidity=float(
+                            reading["relative_humidity_pct"]
+                        ),
+                        pressure=float(
+                            reading["pressure_hpa"]
+                        ),
+                    )
+
+                if scenario_batches_remaining > 0:
+                    scenario_batches_remaining -= 1
+
             except requests.RequestException as exc:
+                states = previous_states
                 print(
                     "\nINGESTION ERROR:"
                     f" {exc}"

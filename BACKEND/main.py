@@ -33,6 +33,10 @@ from maintenance_risk import (
     attach_trajectory_and_horizon,
     rank_maintenance_results,
 )
+from live_scenarios import (
+    apply_live_scenario,
+    station_regions_from_rows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +217,12 @@ class RawTelemetryBatch(BaseModel):
 
 
 class SimulationRequest(BaseModel):
+    station_id: str
+    scenario_id: str
+    intensity: int = 85
+
+
+class LiveScenarioRequest(BaseModel):
     station_id: str
     scenario_id: str
     intensity: int = 85
@@ -2708,6 +2718,121 @@ def ingest_batch(
 
             "results":
                 results,
+        }
+
+    except Exception as e:
+
+        import traceback
+
+        traceback.print_exc()
+
+        return {
+            "error": str(e)
+        }
+
+
+# ============================================================
+# LIVE PIPELINE SCENARIO INJECTION
+# ============================================================
+
+@app.post("/live-scenario")
+def live_scenario(
+    request: LiveScenarioRequest,
+):
+    """
+    Inject one live raw-telemetry scenario into the next
+    synchronized 15-minute fleet batch.
+
+    This endpoint does not run a parallel simulator and does not
+    fabricate model output. It derives the next batch from the
+    current live fleet baseline, perturbs only raw sensor values,
+    and then routes the batch through /ingest/batch.
+    """
+
+    try:
+
+        latest_rows = get_latest_per_station()
+
+        if len(latest_rows) != 20:
+            return {
+                "error":
+                    "Live scenario requires exactly 20 latest "
+                    f"live stations; found {len(latest_rows)}."
+            }
+
+        latest_timestamps = {
+            _normalize_ingest_timestamp(
+                str(row["timestamp"])
+            )
+            for row in latest_rows
+        }
+
+        if len(latest_timestamps) != 1:
+            return {
+                "error":
+                    "Latest live fleet is not synchronized: "
+                    f"found {len(latest_timestamps)} timestamps."
+            }
+
+        latest_timestamp = next(iter(latest_timestamps))
+        next_timestamp = latest_timestamp + pd.Timedelta(
+            minutes=15
+        )
+
+        existing_next_rows = get_latest_station_context(
+            timestamp=next_timestamp,
+            max_age_seconds=1800,
+        )
+
+        if existing_next_rows:
+            return {
+                "error":
+                    "Refusing duplicate/out-of-order live "
+                    f"scenario timestamp {next_timestamp.isoformat()}."
+            }
+
+        baseline_readings = [
+            {
+                "station_id": str(row["station_id"]),
+                "timestamp": next_timestamp.isoformat(),
+                "temperature_c": float(row["temperature_c"]),
+                "relative_humidity_pct":
+                    float(row["relative_humidity_pct"]),
+                "pressure_hpa": float(row["pressure_hpa"]),
+            }
+            for row in latest_rows
+        ]
+
+        station_regions = station_regions_from_rows(
+            stations_df.to_dict(
+                orient="records"
+            )
+        )
+
+        injected_readings, scenario_meta = apply_live_scenario(
+            readings=baseline_readings,
+            scenario_id=request.scenario_id,
+            target_station_id=request.station_id,
+            intensity=request.intensity,
+            station_regions=station_regions,
+        )
+
+        ingest_result = ingest_batch(
+            RawTelemetryBatch(
+                readings=[
+                    RawTelemetry(**reading)
+                    for reading in injected_readings
+                ]
+            )
+        )
+
+        if isinstance(ingest_result, dict) and ingest_result.get("error"):
+            return ingest_result
+
+        return {
+            "status": "live_scenario_ingested",
+            "scenario": scenario_meta,
+            "ingest": ingest_result,
         }
 
     except Exception as e:
