@@ -21,7 +21,15 @@ from database import (
     get_live_anomaly_history,
     get_latest_station_context,
     reset_database,
+    get_connection,
+    acquire_live_tick_lock,
+    get_or_bootstrap_live_state,
+    save_live_state,
+    record_live_tick,
+    get_live_tick_count,
 )
+
+from live_generator import generate_next_batch
 
 from feature_engineering import (
     build_features,
@@ -2729,6 +2737,155 @@ def ingest_batch(
         return {
             "error": str(e)
         }
+
+
+# ============================================================
+# BACKEND-OWNED LIVE TICK
+# ============================================================
+
+
+class LiveTickRequest(BaseModel):
+    """Trigger one clean logical 15-minute observation."""
+    trigger: str = "manual"
+
+
+@app.post("/live-tick")
+def live_tick(request: LiveTickRequest):
+    """
+    Generate and ingest exactly one clean 20-station live snapshot.
+
+    The PostgreSQL advisory lock serializes ticks across backend instances.
+    The logical clock and clean generator state are persisted in PostgreSQL.
+    """
+    trigger = str(request.trigger).strip() or "manual"
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                acquire_live_tick_lock(cur)
+                state = get_or_bootstrap_live_state(cur)
+                last_obs_ts = state["last_observation_ts"]
+                next_timestamp = (
+                    last_obs_ts + pd.Timedelta(minutes=15)
+                )
+
+                # Crash recovery: if ingestion completed before state save,
+                # recover the clean state from the already-persisted batch.
+                cur.execute("""
+                    SELECT
+                        station_id,
+                        timestamp,
+                        temperature_c,
+                        relative_humidity_pct,
+                        pressure_hpa
+                    FROM readings
+                    WHERE source = 'live'
+                      AND timestamp = %s
+                    ORDER BY station_id
+                """, (next_timestamp,))
+                existing_rows = cur.fetchall()
+
+                if existing_rows:
+                    if len(existing_rows) != 20:
+                        raise RuntimeError(
+                            "Found partial live tick at "
+                            f"{next_timestamp.isoformat()}: {len(existing_rows)} rows."
+                        )
+                    recovered_states = {
+                        str(row["station_id"]): {
+                            "temperature_c": float(row["temperature_c"]),
+                            "relative_humidity_pct": float(row["relative_humidity_pct"]),
+                            "pressure_hpa": float(row["pressure_hpa"]),
+                        }
+                        for row in existing_rows
+                    }
+                    save_live_state(cur, next_timestamp, recovered_states)
+                    tick = record_live_tick(
+                        cur,
+                        next_timestamp,
+                        "recovered",
+                        20,
+                    )
+                    tick_count = get_live_tick_count(cur)
+                    conn.commit()
+                    return {
+                        "status": "recovered_existing_tick",
+                        "timestamp": next_timestamp.isoformat(),
+                        "stations_processed": 20,
+                        "source": "live",
+                        "generator": "backend_owned_v1",
+                        "tick": tick,
+                        "tick_count": tick_count,
+                    }
+
+                clean_states = {
+                    str(station_id): {
+                        "temperature_c": float(values["temperature_c"]),
+                        "relative_humidity_pct": float(values["relative_humidity_pct"]),
+                        "pressure_hpa": float(values["pressure_hpa"]),
+                    }
+                    for station_id, values in state["generator_state"].items()
+                }
+
+                readings, next_states = generate_next_batch(
+                    clean_states,
+                    next_timestamp,
+                )
+
+                ingest_result = ingest_batch(
+                    RawTelemetryBatch(
+                        readings=[
+                            RawTelemetry(**reading)
+                            for reading in readings
+                        ]
+                    )
+                )
+
+                if (
+                    not isinstance(ingest_result, dict)
+                    or ingest_result.get("error")
+                ):
+                    raise RuntimeError(
+                        f"Live tick ingestion failed: {ingest_result}"
+                    )
+
+                if ingest_result.get("stations_processed") != 20:
+                    raise RuntimeError(
+                        "Live tick ingestion processed "
+                        f"{ingest_result.get('stations_processed')} stations instead of 20."
+                    )
+
+                # Save the CLEAN state. Scenario overlays are intentionally
+                # not part of this milestone and will never become baseline.
+                save_live_state(
+                    cur,
+                    next_timestamp,
+                    next_states,
+                )
+                tick = record_live_tick(
+                    cur,
+                    next_timestamp,
+                    trigger,
+                    20,
+                )
+                tick_count = get_live_tick_count(cur)
+                conn.commit()
+
+                return {
+                    "status": "live_tick_completed",
+                    "timestamp": next_timestamp.isoformat(),
+                    "stations_processed": 20,
+                    "source": "live",
+                    "generator": "backend_owned_v1",
+                    "logical_interval_minutes": 15,
+                    "tick": tick,
+                    "tick_count": tick_count,
+                    "raw_telemetry": readings,
+                    "results": ingest_result.get("results", []),
+                }
+    except Exception as exc:
+        logger.exception("Live tick failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 # ============================================================

@@ -2,6 +2,8 @@ import os
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
+from live_generator import load_station_profiles
 
 
 # ============================================================
@@ -119,12 +121,367 @@ def init_db():
                 )
             """)
 
+            # ------------------------------------------------
+            # Backend-owned live tick state
+            # ------------------------------------------------
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS live_state (
+                    id INTEGER PRIMARY KEY,
+                    last_observation_ts TIMESTAMPTZ NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    generator_state JSONB
+                )
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS live_ticks (
+                    id BIGSERIAL PRIMARY KEY,
+                    observation_ts TIMESTAMPTZ NOT NULL,
+                    trigger_type TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    station_count INTEGER,
+                    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    completed_at TIMESTAMPTZ,
+                    error_message TEXT
+                )
+            """)
+
+            cur.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS
+                uq_live_ticks_idempotency_key
+                ON live_ticks (idempotency_key)
+            """)
+
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS
+                idx_live_ticks_observation_ts
+                ON live_ticks (observation_ts DESC)
+            """)
+
+            cur.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS
+                idx_readings_live_station_timestamp_unique
+                ON readings (
+                    station_id,
+                    timestamp
+                )
+                WHERE source = 'live'
+            """)
+
         conn.commit()
 
     print(
         "PostgreSQL database initialized. "
         "Table 'readings' ready."
     )
+
+
+# ============================================================
+# LIVE TICK STATE
+# ============================================================
+
+LIVE_TICK_LOCK_KEY = 26073001
+
+
+def acquire_live_tick_lock(cur):
+    """Serialize all live ticks across backend instances."""
+    cur.execute(
+        "SELECT pg_advisory_xact_lock(%s)",
+        (LIVE_TICK_LOCK_KEY,),
+    )
+
+
+def _live_state_from_row(row):
+    if row is None:
+        return None
+
+    generator_state = row.get("generator_state")
+
+    if generator_state is None:
+        generator_state = {}
+
+    return {
+        "last_observation_ts": row["last_observation_ts"],
+        "generator_state": generator_state,
+    }
+
+
+def _bootstrap_generator_state_from_live_rows(cur):
+    """
+    Bootstrap the clean generator state from calibrated station profiles.
+
+    The live database is NOT used as the generator baseline because live
+    telemetry may contain anomalies or may have been initialized from an
+    older generator state.
+
+    The logical clock remains authoritative in live_state. This function
+    only provides the clean sensor state used to generate the next
+    observation.
+    """
+
+    profiles = load_station_profiles()
+
+    if len(profiles) != 20:
+        raise RuntimeError(
+            "Cannot bootstrap live generator state: "
+            f"expected 20 calibration profiles, found {len(profiles)}."
+        )
+
+    cur.execute("""
+        SELECT DISTINCT station_id
+        FROM readings
+        WHERE source = 'live'
+    """)
+    live_station_ids = {
+        str(row["station_id"])
+        for row in cur.fetchall()
+    }
+
+    profile_station_ids = {
+        profile.station_id
+        for profile in profiles
+    }
+
+    if live_station_ids and live_station_ids != profile_station_ids:
+        raise RuntimeError(
+            "Cannot bootstrap live generator state: "
+            "live station set does not match calibration profiles."
+        )
+
+    cur.execute("""
+        SELECT last_observation_ts
+        FROM live_state
+        WHERE id = 1
+    """)
+    row = cur.fetchone()
+
+    if row is None or row["last_observation_ts"] is None:
+        raise RuntimeError(
+            "Cannot bootstrap live generator state: "
+            "no live observation timestamp exists."
+        )
+
+    generator_state = {}
+
+    for profile in profiles:
+        generator_state[profile.station_id] = {
+            "temperature_c": float(profile.temperature_mean),
+            "relative_humidity_pct": float(profile.humidity_mean),
+            "pressure_hpa": float(profile.pressure_mean),
+        }
+
+    return row["last_observation_ts"], generator_state
+
+
+def get_or_bootstrap_live_state(cur):
+    """
+    Return the singleton backend-owned live clock/state.
+
+    The actual Neon schema is:
+
+        id
+        last_observation_ts
+        updated_at
+        generator_state
+
+    If generator_state is missing, it is initialized from the
+    calibrated station profiles, while the logical observation
+    timestamp remains authoritative in live_state.
+    """
+
+    cur.execute("""
+        SELECT
+            id,
+            last_observation_ts,
+            updated_at,
+            generator_state
+        FROM live_state
+        WHERE id = 1
+        FOR UPDATE
+    """)
+
+    row = cur.fetchone()
+
+    if row is None:
+        last_observation_ts, generator_state = (
+            _bootstrap_generator_state_from_live_rows(cur)
+        )
+
+        cur.execute("""
+            INSERT INTO live_state (
+                id,
+                last_observation_ts,
+                updated_at,
+                generator_state
+            )
+            VALUES (
+                1,
+                %s,
+                NOW(),
+                %s
+            )
+        """, (
+            last_observation_ts,
+            Jsonb(generator_state),
+        ))
+
+        return {
+            "last_observation_ts": last_observation_ts,
+            "generator_state": generator_state,
+        }
+
+    state = _live_state_from_row(row)
+
+    if not state["generator_state"]:
+        last_observation_ts, generator_state = (
+            _bootstrap_generator_state_from_live_rows(cur)
+        )
+
+        # Keep the database clock authoritative. If it already
+        # exists, only fill the missing generator state.
+        state_timestamp = state["last_observation_ts"]
+
+        if state_timestamp != last_observation_ts:
+            last_observation_ts = state_timestamp
+
+        cur.execute("""
+            UPDATE live_state
+            SET
+                last_observation_ts = %s,
+                generator_state = %s,
+                updated_at = NOW()
+            WHERE id = 1
+        """, (
+            last_observation_ts,
+            Jsonb(generator_state),
+        ))
+
+        state = {
+            "last_observation_ts": last_observation_ts,
+            "generator_state": generator_state,
+        }
+
+    return state
+
+
+def save_live_state(
+    cur,
+    observation_ts,
+    generator_state,
+):
+    """Persist the clean backend-owned generator state."""
+
+    cur.execute("""
+        INSERT INTO live_state (
+            id,
+            last_observation_ts,
+            updated_at,
+            generator_state
+        )
+        VALUES (
+            1,
+            %s,
+            NOW(),
+            %s
+        )
+        ON CONFLICT (id)
+        DO UPDATE SET
+            last_observation_ts = EXCLUDED.last_observation_ts,
+            updated_at = NOW(),
+            generator_state = EXCLUDED.generator_state
+    """, (
+        observation_ts,
+        Jsonb(generator_state),
+    ))
+
+
+def record_live_tick(
+    cur,
+    observation_ts,
+    trigger_type,
+    station_count,
+    status="completed",
+    error_message=None,
+):
+    """
+    Record one live tick.
+
+    The logical observation timestamp is the idempotency key so
+    duplicate scheduler calls for the same logical step become
+    harmless no-ops.
+    """
+
+    idempotency_key = (
+        f"live-tick:{observation_ts.isoformat()}"
+    )
+
+    cur.execute("""
+        INSERT INTO live_ticks (
+            observation_ts,
+            trigger_type,
+            idempotency_key,
+            status,
+            station_count,
+            completed_at,
+            error_message
+        )
+        VALUES (
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            CASE
+                WHEN %s = 'completed'
+                THEN NOW()
+                ELSE NULL
+            END,
+            %s
+        )
+        ON CONFLICT (idempotency_key)
+        DO UPDATE SET
+            trigger_type = EXCLUDED.trigger_type,
+            status = EXCLUDED.status,
+            station_count = EXCLUDED.station_count,
+            completed_at = EXCLUDED.completed_at,
+            error_message = EXCLUDED.error_message
+        RETURNING
+            id,
+            observation_ts,
+            trigger_type,
+            idempotency_key,
+            status,
+            station_count,
+            started_at,
+            completed_at,
+            error_message
+    """, (
+        observation_ts,
+        trigger_type,
+        idempotency_key,
+        status,
+        station_count,
+        status,
+        error_message,
+    ))
+
+    return cur.fetchone()
+
+
+def get_live_tick_count(cur):
+    """Return the number of completed live ticks."""
+
+    cur.execute("""
+        SELECT COUNT(*) AS count
+        FROM live_ticks
+        WHERE status = 'completed'
+    """)
+
+    row = cur.fetchone()
+
+    return int(row["count"])
 
 
 # ============================================================
@@ -405,10 +762,12 @@ def get_station_feature_history(
 
 def get_station_feature_history_batch(
     station_ids,
-    limit=672,
+    limit=96,
 ):
     """Return bounded raw history for multiple stations in one query."""
+
     station_ids = [str(station_id) for station_id in station_ids]
+
     if not station_ids:
         return []
 
@@ -453,7 +812,9 @@ def get_station_feature_history_batch(
 
 def get_live_anomaly_history(station_ids):
     """Return persisted live anomalies for multiple stations."""
+
     station_ids = [str(station_id) for station_id in station_ids]
+
     if not station_ids:
         return []
 
@@ -551,6 +912,14 @@ def reset_live_data():
 
             deleted = cur.rowcount
 
+            cur.execute("""
+                DELETE FROM live_ticks
+            """)
+
+            cur.execute("""
+                DELETE FROM live_state
+            """)
+
         conn.commit()
 
     print(
@@ -584,6 +953,14 @@ def reset_database():
             """)
 
             deleted = cur.rowcount
+
+            cur.execute("""
+                DELETE FROM live_ticks
+            """)
+
+            cur.execute("""
+                DELETE FROM live_state
+            """)
 
         conn.commit()
 
