@@ -397,6 +397,30 @@ def save_live_state(
     ))
 
 
+def get_live_tick_by_idempotency_key(cur, idempotency_key):
+    """Return an existing live tick for an external idempotency key."""
+
+    cur.execute("""
+        SELECT
+            id,
+            observation_ts,
+            trigger_type,
+            idempotency_key,
+            status,
+            station_count,
+            started_at,
+            completed_at,
+            error_message
+        FROM live_ticks
+        WHERE idempotency_key = %s
+        LIMIT 1
+    """, (
+        idempotency_key,
+    ))
+
+    return cur.fetchone()
+
+
 def record_live_tick(
     cur,
     observation_ts,
@@ -404,18 +428,21 @@ def record_live_tick(
     station_count,
     status="completed",
     error_message=None,
+    idempotency_key=None,
 ):
     """
     Record one live tick.
 
-    The logical observation timestamp is the idempotency key so
-    duplicate scheduler calls for the same logical step become
-    harmless no-ops.
+    When an external idempotency key is supplied, it is persisted
+    as the unique identity of that scheduler/request attempt.
+    Otherwise the logical observation timestamp remains the
+    backward-compatible idempotency key.
     """
 
-    idempotency_key = (
-        f"live-tick:{observation_ts.isoformat()}"
-    )
+    if not idempotency_key:
+        idempotency_key = (
+            f"live-tick:{observation_ts.isoformat()}"
+        )
 
     cur.execute("""
         INSERT INTO live_ticks (

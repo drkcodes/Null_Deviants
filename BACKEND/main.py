@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
 import pandas as pd
 import numpy as np
@@ -26,6 +26,7 @@ from database import (
     get_or_bootstrap_live_state,
     save_live_state,
     record_live_tick,
+    get_live_tick_by_idempotency_key,
     get_live_tick_count,
 )
 
@@ -2750,19 +2751,74 @@ class LiveTickRequest(BaseModel):
 
 
 @app.post("/live-tick")
-def live_tick(request: LiveTickRequest):
+def live_tick(
+    request: LiveTickRequest,
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+    ),
+):
     """
     Generate and ingest exactly one clean 20-station live snapshot.
 
     The PostgreSQL advisory lock serializes ticks across backend instances.
     The logical clock and clean generator state are persisted in PostgreSQL.
+
+    An optional Idempotency-Key makes scheduler retries safe:
+    repeated requests carrying the same key return the existing tick
+    without advancing the logical clock.
     """
     trigger = str(request.trigger).strip() or "manual"
+
+    if idempotency_key is not None:
+        idempotency_key = idempotency_key.strip()
+
+        if not idempotency_key:
+            raise HTTPException(
+                status_code=400,
+                detail="Idempotency-Key cannot be empty.",
+            )
+
+        if len(idempotency_key) > 255:
+            raise HTTPException(
+                status_code=400,
+                detail="Idempotency-Key must be 255 characters or fewer.",
+            )
 
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 acquire_live_tick_lock(cur)
+
+                # --------------------------------------------------------
+                # External idempotency check.
+                #
+                # This happens AFTER the advisory lock so two concurrent
+                # requests with the same key cannot both pass the check.
+                # --------------------------------------------------------
+                if idempotency_key:
+                    existing_tick = get_live_tick_by_idempotency_key(
+                        cur,
+                        idempotency_key,
+                    )
+
+                    if existing_tick is not None:
+                        tick_count = get_live_tick_count(cur)
+                        conn.commit()
+
+                        return {
+                            "status": "live_tick_replayed",
+                            "timestamp": existing_tick["observation_ts"].isoformat(),
+                            "stations_processed": existing_tick["station_count"],
+                            "source": "live",
+                            "generator": "backend_owned_v1",
+                            "logical_interval_minutes": 15,
+                            "idempotency_key": existing_tick["idempotency_key"],
+                            "replayed": True,
+                            "tick": existing_tick,
+                            "tick_count": tick_count,
+                        }
+
                 state = get_or_bootstrap_live_state(cur)
                 last_obs_ts = state["last_observation_ts"]
                 next_timestamp = (
@@ -2805,6 +2861,7 @@ def live_tick(request: LiveTickRequest):
                         next_timestamp,
                         "recovered",
                         20,
+                        idempotency_key=idempotency_key,
                     )
                     tick_count = get_live_tick_count(cur)
                     conn.commit()
@@ -2867,6 +2924,7 @@ def live_tick(request: LiveTickRequest):
                     next_timestamp,
                     trigger,
                     20,
+                    idempotency_key=idempotency_key,
                 )
                 tick_count = get_live_tick_count(cur)
                 conn.commit()
