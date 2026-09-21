@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import logging
+import os
 import shap
 import threading
 import time as _time
@@ -45,6 +46,10 @@ from maintenance_risk import (
 from live_scenarios import (
     apply_live_scenario,
     station_regions_from_rows,
+)
+
+LIVE_TICK_SCHEDULER_TOKEN = os.getenv(
+    "LIVE_TICK_SCHEDULER_TOKEN",
 )
 
 logger = logging.getLogger(__name__)
@@ -2757,6 +2762,10 @@ def live_tick(
         default=None,
         alias="Idempotency-Key",
     ),
+    scheduler_token: str | None = Header(
+        default=None,
+        alias="X-Live-Tick-Token",
+    ),
 ):
     """
     Generate and ingest exactly one clean 20-station live snapshot.
@@ -2769,6 +2778,22 @@ def live_tick(
     without advancing the logical clock.
     """
     trigger = str(request.trigger).strip() or "manual"
+
+    # Automatic scheduler calls must prove possession of the
+    # backend-owned scheduler secret. Manual/demo calls remain
+    # available without this header.
+    if trigger == "scheduler":
+        if not LIVE_TICK_SCHEDULER_TOKEN:
+            raise HTTPException(
+                status_code=503,
+                detail="Live tick scheduler authentication is not configured.",
+            )
+
+        if scheduler_token != LIVE_TICK_SCHEDULER_TOKEN:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid live tick scheduler token.",
+            )
 
     if idempotency_key is not None:
         idempotency_key = idempotency_key.strip()
