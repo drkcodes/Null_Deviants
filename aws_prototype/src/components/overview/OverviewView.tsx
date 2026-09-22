@@ -12,6 +12,7 @@ import { AndhraPradeshMap } from '../maps/AndhraPradeshMap';
 import { TelemetryChart } from '../charts/TelemetryChart';
 import { NetworkHealthDonut } from '../charts/NetworkHealthDonut';
 import { StatusBadge, CauseBadge, SeverityBadge } from '../common/Badges';
+import { AnomalyDetailModal } from '../anomalies/AnomalyDetailModal';
 import {
   Radio,
   CheckCircle2,
@@ -31,12 +32,13 @@ interface OverviewViewProps {
   summary: NetworkSummary;
   alerts: AlertRecord[];
   anomalies: AnomalyRecord[];
+  selectedAnomaly: AnomalyRecord | null;
   activityEvents: ActivityEvent[];
   timeSeries: TelemetryPoint[];
   selectedStationId: string;
   onSelectStation: (stationId: string) => void;
   onViewStationDetails: (stationId: string) => void;
-  onSelectAnomaly: (anomaly: AnomalyRecord) => void;
+  onSelectAnomaly: (anomaly: AnomalyRecord | null) => void;
   onNavigateToSection: (section: any) => void;
 }
 
@@ -45,6 +47,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   summary,
   alerts,
   anomalies,
+  selectedAnomaly,
   activityEvents,
   timeSeries,
   selectedStationId,
@@ -218,9 +221,19 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
                     <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
                       <span>{alert.timestamp} IST</span>
-                      <span className="text-blue-600 font-medium hover:underline flex items-center gap-0.5">
-                        View evidence →
-                      </span>
+                        <button
+                          type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                                if (fullAnomaly) {
+                                  onSelectAnomaly(fullAnomaly);
+                                }
+                              }}
+                              disabled={!fullAnomaly}
+                              className="text-blue-600 font-medium hover:underline flex items-center gap-0.5 cursor-pointer disabled:cursor-default disabled:no-underline"
+                      >
+                          View evidence →
+                    </button>
                     </div>
                   </div>
                 );
@@ -366,6 +379,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </table>
         </div>
       </div>
+      <AnomalyDetailModal
+        anomaly={selectedAnomaly}
+        onClose={() => onSelectAnomaly(null)}
+        onViewStation={onViewStationDetails}
+      />
     </div>
   );
 };
