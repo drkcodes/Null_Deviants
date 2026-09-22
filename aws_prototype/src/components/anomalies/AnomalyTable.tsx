@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AnomalyRecord, AnomalyCause, AnomalySeverity } from '../../types';
+import { formatISTDateTime } from '../../lib/formatters';
 import { CauseBadge, SeverityBadge } from '../common/Badges';
 import { Search, ArrowRight, CheckCircle2, Clock } from 'lucide-react';
 
@@ -121,7 +122,7 @@ export const AnomalyTable: React.FC<AnomalyTableProps> = ({
                     </div>
                   </td>
                   <td className="py-3.5 px-3 font-mono text-[11px] text-slate-500">
-                    {item.timestamp} IST
+                    {formatISTDateTime(item.timestamp)}
                   </td>
                   <td className="py-3.5 px-3">
                     <CauseBadge cause={item.cause} />

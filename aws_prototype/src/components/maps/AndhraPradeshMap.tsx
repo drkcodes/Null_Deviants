@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { Station, StationStatus, Region } from '../../types';
+import { formatISTTime } from '../../lib/formatters';
 import { StatusBadge, CauseBadge } from '../common/Badges';
 import { Navigation } from 'lucide-react';
 import { ArrowRight } from 'lucide-react';
@@ -603,7 +604,7 @@ export const AndhraPradeshMap: React.FC<AndhraPradeshMapProps> = ({
 
               <span>
                 {selectedStation.hasTelemetry
-                  ? selectedStation.lastObservationTime
+                  ? formatISTTime(selectedStation.lastObservationTime, true)
                   : 'Telemetry unavailable'}
               </span>
             </div>

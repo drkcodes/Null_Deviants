@@ -1,5 +1,6 @@
 import React from 'react';
 import { AnomalyRecord } from '../../types';
+import { formatISTDateTimeWithZone } from '../../lib/formatters';
 import { CauseBadge, SeverityBadge } from '../common/Badges';
 import {
   X,
@@ -77,7 +78,7 @@ export const AnomalyDetailModal: React.FC<AnomalyDetailModalProps> = ({
               {anomaly.faultType} at {anomaly.stationName} ({anomaly.stationId})
             </h2>
             <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-              <span>{anomaly.timestamp} IST</span>
+              <span>{formatISTDateTimeWithZone(anomaly.timestamp)}</span>
               <span>•</span>
               <span>{anomaly.region}</span>
               <span>•</span>

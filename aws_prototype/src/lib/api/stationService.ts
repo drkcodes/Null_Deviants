@@ -1,3 +1,4 @@
+import { formatISTTime } from '../formatters';
 import {
   Station,
   StationStatus,
@@ -676,7 +677,7 @@ class StationService {
         : null;
 
     const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} IST`;
+    const timeStr = formatISTTime(now, true);
 
     return {
       totalStations: stations.length,
@@ -755,7 +756,7 @@ class StationService {
     if (alerts.length > 0) {
       return alerts.map((alt) => ({
         id: `EVT-${alt.id}`,
-        time: alt.timestamp.includes(' ') ? alt.timestamp.split(' ')[1] : alt.timestamp,
+        time: formatISTTime(alt.timestamp),
         stationId: alt.stationId,
         message: `${alt.cause} anomaly detected on ${alt.stationName} (${alt.anomalyType}, ${alt.confidence}% confidence)`,
         type: 'anomaly',

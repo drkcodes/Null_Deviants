@@ -7,6 +7,7 @@ import {
   ActivityEvent,
   TelemetryPoint,
 } from '../../types';
+import { formatISTTime } from '../../lib/formatters';
 import { MetricCard } from '../common/MetricCard';
 import { AndhraPradeshMap } from '../maps/AndhraPradeshMap';
 import { TelemetryChart } from '../charts/TelemetryChart';
@@ -221,7 +222,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                     </p>
 
                     <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                      <span>{alert.timestamp} IST</span>
+                      <span>{formatISTTime(alert.timestamp, true)}</span>
                         <button
                           type="button"
                             onClick={(e) => {

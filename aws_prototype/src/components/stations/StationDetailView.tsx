@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Station, StationSensorHealth, AnomalyRecord, TelemetryPoint, MaintenanceRiskResult } from '../../types';
+import { formatISTDateTime, formatISTTime } from '../../lib/formatters';
 import { stationService } from '../../lib/api/stationService';
 import { StatusBadge, CauseBadge, SeverityBadge, ChannelBadge } from '../common/Badges';
 import { TelemetryChart } from '../charts/TelemetryChart';
@@ -194,7 +195,7 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
                 <div className="text-[10px] uppercase font-medium text-slate-400">Last Observation</div>
                 <div className="text-xs font-mono font-medium text-slate-700 flex items-center gap-1 mt-1">
                   <Clock className="w-3 h-3 text-slate-400" />
-                  <span>{station.hasTelemetry ? station.lastObservationTime : 'Telemetry unavailable'}</span>
+                  <span>{station.hasTelemetry ? formatISTTime(station.lastObservationTime, true) : 'Telemetry unavailable'}</span>
                 </div>
               </div>
             </div>
@@ -284,7 +285,7 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
             <div className="text-xs text-slate-400 font-mono">
               {health.dataSufficiency.status === 'insufficient'
                 ? 'Insufficient telemetry history'
-                : `Last audit: ${health.lastEvaluationTime}`}
+                : `Last audit: ${formatISTDateTime(health.lastEvaluationTime)} IST`}
             </div>
           </div>
 
@@ -512,7 +513,7 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({
                     <CauseBadge cause={ano.cause} />
                     <SeverityBadge severity={ano.severity} />
                   </div>
-                  <span className="font-mono text-slate-500 text-[11px]">{ano.timestamp} IST</span>
+                  <span className="font-mono text-slate-500 text-[11px]">{formatISTDateTime(ano.timestamp)}</span>
                 </div>
                 <p className="mt-1.5 text-[11px] text-slate-500 leading-relaxed">
                   {ano.evidence?.explanation || 'No explanation available'}

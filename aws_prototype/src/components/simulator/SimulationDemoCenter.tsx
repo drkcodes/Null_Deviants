@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Station, SimulationScenario, SimulationResult } from '../../types';
+import { formatISTDateTimeWithZone } from '../../lib/formatters';
 import { stationService } from '../../lib/api/stationService';
 import { CauseBadge, SeverityBadge, ChannelBadge } from '../common/Badges';
 import {
@@ -333,7 +334,7 @@ export const SimulationDemoCenter: React.FC<SimulationDemoCenterProps> = ({
           <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono">
             <div>
               <span className="text-slate-500">Timestamp:</span>{' '}
-              <span className="font-bold text-slate-900">{liveResult.ingest?.timestamp}</span>
+              <span className="font-bold text-slate-900">{liveResult.ingest?.timestamp ? formatISTDateTimeWithZone(liveResult.ingest.timestamp) : ''}</span>
             </div>
             <div>
               <span className="text-slate-500">Stations:</span>{' '}
@@ -440,7 +441,7 @@ export const SimulationDemoCenter: React.FC<SimulationDemoCenterProps> = ({
                 </h3>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Target: {selectedStation.id} ({selectedStation.name}) • Timestamp: {simResult.timestamp}
+                Target: {selectedStation.id} ({selectedStation.name}) • Timestamp: {formatISTDateTimeWithZone(simResult.timestamp)}
               </p>
             </div>
 

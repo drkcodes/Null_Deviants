@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatISTTime } from '../../lib/formatters';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -170,6 +171,7 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
             <CartesianGrid strokeDasharray="2 4" stroke="#f1f5f9" vertical={false} />
             <XAxis
               dataKey="timestamp"
+              tickFormatter={(value) => formatISTTime(String(value))}
               stroke="#94a3b8"
               fontSize={10}
               tickLine={false}
@@ -190,7 +192,7 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({
 
                 return (
                   <div className="apple-glass-floating p-3 rounded-xl border border-white/90 shadow-[0_12px_28px_rgba(15,23,42,0.1)] text-xs">
-                    <div className="font-semibold text-slate-900">{label} IST</div>
+                    <div className="font-semibold text-slate-900">{formatISTTime(String(label), true)}</div>
                     <div className="mt-1 flex items-center gap-2">
                       <span className="text-slate-500">{currentConfig.label}:</span>
                       <span className="font-semibold text-slate-900 font-mono">
