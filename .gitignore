@@ -57,3 +57,15 @@ Data/
 !BACKEND/stations.csv
 !BACKEND/model_anomaly_detector.pkl
 !BACKEND/model_weather_or_sensor.pkl
+
+# Local investigation artifacts
+BACKEND/analyze_*.py
+BACKEND/check_*.py
+BACKEND/compare_*.py
+BACKEND/diagnose_*.py
+BACKEND/inspect_*.py
+BACKEND/trace_*.py
+BACKEND/*_diff.txt
+backups/
+phase2a_apply_live_tick.py
+station_detail_diff.txt
