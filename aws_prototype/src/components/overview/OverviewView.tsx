@@ -190,9 +190,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 </div>
               ) : (
                 alerts.map((alert) => {
-                  const fullAnomaly =
-                    anomalies.find((a) => a.id.includes(alert.id.replace('ALT-', ''))) ||
-                    anomalies[0];
+                  const alertObservationId = alert.id.replace(/^ALT-/, '');
+                  const fullAnomaly = anomalies.find(
+                    (a) => a.id === `ANO-${alertObservationId}`,
+                  );
 
                   return (
                     <div
