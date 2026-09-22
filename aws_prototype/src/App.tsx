@@ -599,6 +599,7 @@ export default function App() {
                 summary={networkSummary}
                 alerts={alerts}
                 anomalies={anomalies}
+                selectedAnomaly={selectedAnomaly}
                 activityEvents={activityEvents}
                 timeSeries={timeSeries}
                 selectedStationId={selectedStationId}
