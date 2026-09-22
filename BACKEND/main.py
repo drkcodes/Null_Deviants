@@ -2980,111 +2980,236 @@ def live_scenario(
     request: LiveScenarioRequest,
 ):
     """
-    Inject one live raw-telemetry scenario into the next
+    Inject one temporary raw-telemetry scenario into the next
     synchronized 15-minute fleet batch.
 
-    This endpoint does not run a parallel simulator and does not
-    fabricate model output. It derives the next batch from the
-    current live fleet baseline, perturbs only raw sensor values,
-    and then routes the batch through /ingest/batch.
+    IMPORTANT:
+    The scenario is applied only to the generated raw readings.
+    The clean backend-owned generator state is persisted separately,
+    so the injected fault cannot contaminate future live ticks.
     """
 
     try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
 
-        latest_rows = get_latest_per_station()
+                # --------------------------------------------------------
+                # Serialize scenario execution with the autonomous
+                # backend-owned live tick.
+                # --------------------------------------------------------
 
-        if len(latest_rows) != 20:
-            return {
-                "error":
-                    "Live scenario requires exactly 20 latest "
-                    f"live stations; found {len(latest_rows)}."
-            }
+                acquire_live_tick_lock(cur)
 
-        latest_timestamps = {
-            _normalize_ingest_timestamp(
-                str(row["timestamp"])
-            )
-            for row in latest_rows
-        }
+                # --------------------------------------------------------
+                # Read the authoritative clean generator state.
+                # Do NOT derive the next generator state from the
+                # potentially anomalous latest database readings.
+                # --------------------------------------------------------
 
-        if len(latest_timestamps) != 1:
-            return {
-                "error":
-                    "Latest live fleet is not synchronized: "
-                    f"found {len(latest_timestamps)} timestamps."
-            }
+                state = get_or_bootstrap_live_state(cur)
 
-        latest_timestamp = next(iter(latest_timestamps))
-        next_timestamp = latest_timestamp + pd.Timedelta(
-            minutes=15
+                last_obs_ts = state["last_observation_ts"]
+
+                next_timestamp = (
+                    last_obs_ts
+                    + pd.Timedelta(minutes=15)
+                )
+
+                # --------------------------------------------------------
+                # Refuse duplicate/out-of-order scenario timestamps.
+                # --------------------------------------------------------
+
+                cur.execute("""
+                    SELECT COUNT(*) AS station_count
+                    FROM readings
+                    WHERE source = 'live'
+                      AND timestamp = %s
+                """, (next_timestamp,))
+
+                existing_count = int(
+                    cur.fetchone()["station_count"]
+                )
+
+                if existing_count:
+                    return {
+                        "error":
+                            "Refusing duplicate/out-of-order "
+                            "live scenario timestamp "
+                            f"{next_timestamp.isoformat()}: "
+                            f"{existing_count} existing live rows."
+                    }
+
+                # --------------------------------------------------------
+                # Reconstruct the CLEAN generator state.
+                # --------------------------------------------------------
+
+                clean_states = {
+                    str(station_id): {
+                        "temperature_c":
+                            float(values["temperature_c"]),
+                        "relative_humidity_pct":
+                            float(values["relative_humidity_pct"]),
+                        "pressure_hpa":
+                            float(values["pressure_hpa"]),
+                    }
+                    for station_id, values
+                    in state["generator_state"].items()
+                }
+
+                # --------------------------------------------------------
+                # Generate a CLEAN 20-station raw snapshot first.
+                #
+                # This produces the state that must be persisted after
+                # the scenario. The scenario overlay is applied only to
+                # the temporary readings below.
+                # --------------------------------------------------------
+
+                clean_readings, next_clean_states = (
+                    generate_next_batch(
+                        clean_states,
+                        next_timestamp,
+                    )
+                )
+
+                if len(clean_readings) != 20:
+                    raise RuntimeError(
+                        "Live scenario clean generator produced "
+                        f"{len(clean_readings)} stations instead of 20."
+                    )
+
+                # --------------------------------------------------------
+                # Apply the requested fault ONLY to the raw batch.
+                #
+                # next_clean_states remains untouched.
+                # --------------------------------------------------------
+
+                station_regions = station_regions_from_rows(
+                    stations_df.to_dict(
+                        orient="records"
+                    )
+                )
+
+                injected_readings, scenario_meta = (
+                    apply_live_scenario(
+                        readings=clean_readings,
+                        scenario_id=request.scenario_id,
+                        target_station_id=request.station_id,
+                        intensity=request.intensity,
+                        station_regions=station_regions,
+                    )
+                )
+
+                if len(injected_readings) != 20:
+                    raise RuntimeError(
+                        "Live scenario produced "
+                        f"{len(injected_readings)} stations instead of 20."
+                    )
+
+                # --------------------------------------------------------
+                # Send the TEMPORARILY MODIFIED raw telemetry through the
+                # existing production ingestion + ML pipeline.
+                # --------------------------------------------------------
+
+                ingest_result = ingest_batch(
+                    RawTelemetryBatch(
+                        readings=[
+                            RawTelemetry(**reading)
+                            for reading in injected_readings
+                        ]
+                    )
+                )
+
+                if (
+                    isinstance(ingest_result, dict)
+                    and ingest_result.get("error")
+                ):
+                    return ingest_result
+
+                if (
+                    ingest_result.get("stations_processed")
+                    != 20
+                ):
+                    raise RuntimeError(
+                        "Live scenario ingestion processed "
+                        f"{ingest_result.get('stations_processed')} "
+                        "stations instead of 20."
+                    )
+
+                # --------------------------------------------------------
+                # CRITICAL:
+                # Persist the CLEAN generator state, never the injected
+                # telemetry values.
+                # --------------------------------------------------------
+
+                save_live_state(
+                    cur,
+                    next_timestamp,
+                    next_clean_states,
+                )
+
+                # --------------------------------------------------------
+                # Record the scenario tick separately from scheduler ticks.
+                # --------------------------------------------------------
+
+                tick = record_live_tick(
+                    cur,
+                    next_timestamp,
+                    "scenario",
+                    20,
+                )
+
+                tick_count = get_live_tick_count(cur)
+
+                conn.commit()
+
+                return {
+                    "status":
+                        "live_scenario_ingested",
+
+                    "timestamp":
+                        next_timestamp.isoformat(),
+
+                    "source":
+                        "live",
+
+                    "generator":
+                        "backend_owned_v1",
+
+                    "logical_interval_minutes":
+                        15,
+
+                    "stations_processed":
+                        20,
+
+                    "scenario":
+                        scenario_meta,
+
+                    "tick":
+                        tick,
+
+                    "tick_count":
+                        tick_count,
+
+                    "raw_telemetry":
+                        injected_readings,
+
+                    "results":
+                        ingest_result.get(
+                            "results",
+                            [],
+                        ),
+                }
+
+    except Exception as exc:
+
+        logger.exception(
+            "Live scenario failed"
         )
 
-        existing_next_rows = get_latest_station_context(
-            timestamp=next_timestamp,
-            max_age_seconds=1800,
-        )
-
-        if existing_next_rows:
-            return {
-                "error":
-                    "Refusing duplicate/out-of-order live "
-                    f"scenario timestamp {next_timestamp.isoformat()}."
-            }
-
-        baseline_readings = [
-            {
-                "station_id": str(row["station_id"]),
-                "timestamp": next_timestamp.isoformat(),
-                "temperature_c": float(row["temperature_c"]),
-                "relative_humidity_pct":
-                    float(row["relative_humidity_pct"]),
-                "pressure_hpa": float(row["pressure_hpa"]),
-            }
-            for row in latest_rows
-        ]
-
-        station_regions = station_regions_from_rows(
-            stations_df.to_dict(
-                orient="records"
-            )
-        )
-
-        injected_readings, scenario_meta = apply_live_scenario(
-            readings=baseline_readings,
-            scenario_id=request.scenario_id,
-            target_station_id=request.station_id,
-            intensity=request.intensity,
-            station_regions=station_regions,
-        )
-
-        ingest_result = ingest_batch(
-            RawTelemetryBatch(
-                readings=[
-                    RawTelemetry(**reading)
-                    for reading in injected_readings
-                ]
-            )
-        )
-
-        if isinstance(ingest_result, dict) and ingest_result.get("error"):
-            return ingest_result
-
-        return {
-            "status": "live_scenario_ingested",
-            "scenario": scenario_meta,
-            "ingest": ingest_result,
-        }
-
-    except Exception as e:
-
-        import traceback
-
-        traceback.print_exc()
-
-        return {
-            "error": str(e)
-        }
-
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
 
 @app.post("/predict")
 def predict(
