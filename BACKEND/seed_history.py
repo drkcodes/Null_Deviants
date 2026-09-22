@@ -52,7 +52,7 @@ def get_connection():
         raise RuntimeError(
             "DATABASE_URL is not set.\n"
             "Set it first, for example:\n"
-            '$env:DATABASE_URL="postgresql://postgres:PASSWORD@localhost:5432/skyguard"'
+            '$env:DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE"'
         )
 
     return psycopg.connect(
