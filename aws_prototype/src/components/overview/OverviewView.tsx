@@ -107,9 +107,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           onClick={() => onNavigateToSection('monitoring')}
         />
         <MetricCard
-          label="Active Anomalies"
+          label="Recent Live Anomalies"
           value={summary.activeAnomalies}
-          subtitle={summary.activeAnomalies > 0 ? 'ML Flagged' : '0 in backend'}
+          subtitle={summary.activeAnomalies > 0 ? 'Recent ML events' : '0 in backend'}
           icon={<BrainCircuit className={`w-4 h-4 ${summary.activeAnomalies > 0 ? 'text-rose-600' : 'text-blue-600'}`} />}
           indicatorColor={summary.activeAnomalies > 0 ? 'rose' : 'slate'}
           onClick={() => onNavigateToSection('anomalies')}
