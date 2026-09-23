@@ -7,7 +7,15 @@ interface NetworkHealthDonutProps {
 }
 
 export const NetworkHealthDonut: React.FC<NetworkHealthDonutProps> = ({ summary }) => {
-  const hasTelemetry = summary.healthyCount !== null;
+  const reportedStationCount =
+    (summary.healthyCount ?? 0) +
+    (summary.watchCount ?? 0) +
+    (summary.criticalCount ?? 0) +
+    (summary.offlineCount ?? 0);
+
+  const hasTelemetry =
+    summary.healthyCount !== null &&
+    reportedStationCount > 0;
 
   const data = hasTelemetry
     ? [
@@ -38,48 +46,62 @@ export const NetworkHealthDonut: React.FC<NetworkHealthDonutProps> = ({ summary 
       </div>
 
       <div className="relative h-44 my-2">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              innerRadius={50}
-              outerRadius={68}
-              paddingAngle={hasTelemetry ? 4 : 0}
-              dataKey="value"
-              stroke="transparent"
-              isAnimationActive={false}
-            >
-              {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip
-              content={({ active, payload }) => {
-                if (!active || !payload || !payload.length) return null;
-                const item = payload[0];
-                return (
-                  <div className="apple-glass-floating p-2.5 rounded-xl border border-white/80 shadow-md text-xs">
-                    <span className="font-semibold text-slate-900">{item.name}: </span>
-                    <span className="font-medium text-slate-700">
-                      {item.value} station(s) (
-                      {Math.round(((item.value as number) / (summary.totalStations || 1)) * 100)}%)
-                    </span>
-                  </div>
-                );
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+        {hasTelemetry ? (
+          <>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  innerRadius={50}
+                  outerRadius={68}
+                  paddingAngle={4}
+                  dataKey="value"
+                  stroke="transparent"
+                  isAnimationActive={false}
+                >
+                  {data.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload || !payload.length) return null;
+                    const item = payload[0];
+                    return (
+                      <div className="apple-glass-floating p-2.5 rounded-xl border border-white/80 shadow-md text-xs">
+                        <span className="font-semibold text-slate-900">{item.name}: </span>
+                        <span className="font-medium text-slate-700">
+                          {item.value} station(s) (
+                          {Math.round(((item.value as number) / (summary.totalStations || 1)) * 100)}%)
+                        </span>
+                      </div>
+                    );
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
 
-        {/* Center label */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-3xl font-light text-slate-900 leading-none tracking-tight">
-            {centerValue}
-          </span>
-          <span className="text-[10px] uppercase tracking-widest text-slate-400 mt-1 font-medium">
-            {centerLabel}
-          </span>
-        </div>
+            {/* Center label */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-3xl font-light text-slate-900 leading-none tracking-tight">
+                {centerValue}
+              </span>
+              <span className="text-[10px] uppercase tracking-widest text-slate-400 mt-1 font-medium">
+                {centerLabel}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center text-center">
+            <div className="w-8 h-8 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin mb-3" />
+            <span className="text-sm font-medium text-slate-700">
+              Calculating fleet status...
+            </span>
+            <span className="text-[11px] text-slate-400 mt-1">
+              Analyzing station telemetry. Please wait a moment.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Breakdown Legend */}
