@@ -61,6 +61,8 @@ export default function App() {
     useState<SimulationScenario[]>([]);
   const [timeSeries, setTimeSeries] =
     useState<TelemetryPoint[]>([]);
+  const [overviewTimeRange, setOverviewTimeRange] =
+    useState<'1h' | '6h' | '24h' | '7d'>('24h');
   const [maintenanceRisk, setMaintenanceRisk] =
     useState<MaintenanceRiskResult[]>([]);
 
@@ -204,7 +206,13 @@ export default function App() {
         selectedStationId
           ? stationService.getTimeSeries(
             selectedStationId,
-            24,
+            overviewTimeRange === '1h'
+              ? 1
+              : overviewTimeRange === '6h'
+              ? 6
+              : overviewTimeRange === '7d'
+              ? 168
+              : 24,
           )
           : Promise.resolve([]),
       ]);
@@ -247,7 +255,7 @@ export default function App() {
     } finally {
       liveRefreshInProgress.current = false;
     }
-  }, [selectedStationId]);
+  }, [selectedStationId, overviewTimeRange]);
 
 
   /*
@@ -397,8 +405,17 @@ export default function App() {
 
     let cancelled = false;
 
+    const hours =
+      overviewTimeRange === '1h'
+        ? 1
+        : overviewTimeRange === '6h'
+        ? 6
+        : overviewTimeRange === '7d'
+        ? 168
+        : 24;
+
     stationService
-      .getTimeSeries(selectedStationId, 24)
+      .getTimeSeries(selectedStationId, hours)
       .then((ts) => {
         if (!cancelled) {
           setTimeSeries(ts);
@@ -416,7 +433,40 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [loading, error, selectedStationId]);
+  }, [loading, error, selectedStationId, overviewTimeRange]);
+
+  const handleOverviewTimeRangeChange = useCallback(
+    async (range: '1h' | '6h' | '24h' | '7d') => {
+      setOverviewTimeRange(range);
+
+      if (!selectedStationId) {
+        return;
+      }
+
+      const hours =
+        range === '1h'
+          ? 1
+          : range === '6h'
+          ? 6
+          : range === '7d'
+          ? 168
+          : 24;
+
+      try {
+        const ts = await stationService.getTimeSeries(
+          selectedStationId,
+          hours,
+        );
+        setTimeSeries(ts);
+      } catch (err) {
+        console.warn(
+          'Failed to load Overview time range:',
+          err,
+        );
+      }
+    },
+    [selectedStationId],
+  );
 
   const handleStationClick = useCallback((id: string) => {
     setSelectedStationId(id);
@@ -602,12 +652,14 @@ export default function App() {
                 selectedAnomaly={selectedAnomaly}
                 activityEvents={activityEvents}
                 timeSeries={timeSeries}
+                overviewTimeRange={overviewTimeRange}
                 selectedStationId={selectedStationId}
                 onSelectStation={handleStationClick}
                 onViewStationDetails={
                   handleViewStationDetails
                 }
                 onSelectAnomaly={setSelectedAnomaly}
+                onOverviewTimeRangeChange={handleOverviewTimeRangeChange}
                 onNavigateToSection={setActivePage}
               />
             </>

@@ -36,10 +36,12 @@ interface OverviewViewProps {
   selectedAnomaly: AnomalyRecord | null;
   activityEvents: ActivityEvent[];
   timeSeries: TelemetryPoint[];
+  overviewTimeRange: '1h' | '6h' | '24h' | '7d';
   selectedStationId: string;
   onSelectStation: (stationId: string) => void;
   onViewStationDetails: (stationId: string) => void;
   onSelectAnomaly: (anomaly: AnomalyRecord | null) => void;
+  onOverviewTimeRangeChange: (range: '1h' | '6h' | '24h' | '7d') => void;
   onNavigateToSection: (section: any) => void;
 }
 
@@ -51,10 +53,12 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   selectedAnomaly,
   activityEvents,
   timeSeries,
+  overviewTimeRange,
   selectedStationId,
   onSelectStation,
   onViewStationDetails,
   onSelectAnomaly,
+  onOverviewTimeRangeChange,
   onNavigateToSection,
 }) => {
   const selectedStation = stations.find((s) => s.id === selectedStationId) || stations[0];
@@ -256,6 +260,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             data={timeSeries}
             stationName={selectedStation.name}
             stationId={selectedStation.id}
+            timeRange={overviewTimeRange}
+            onTimeRangeChange={onOverviewTimeRangeChange}
             height={270}
           />
         </div>
