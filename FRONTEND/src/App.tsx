@@ -29,7 +29,7 @@ import { ReportsView } from './components/reports/ReportsView';
 import { SettingsView } from './components/settings/SettingsView';
 import { SimulationDemoCenter } from './components/simulator/SimulationDemoCenter';
 
-const LIVE_REFRESH_MS = 2000;
+const LIVE_REFRESH_MS = 30000;
 const MAINTENANCE_REFRESH_MS = 60000;
 
 export default function App() {
