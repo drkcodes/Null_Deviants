@@ -89,14 +89,17 @@ export const AndhraPradeshMap: React.FC<AndhraPradeshMapProps> = ({
       preferCanvas: true,
     });
 
-    L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-      {
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
-        subdomains: 'abcd',
-        maxZoom: 19,
-      },
-    ).addTo(map);
+    const cartoApiKey = import.meta.env.VITE_CARTO_BASEMAP_KEY;
+
+    const cartoTileUrl = cartoApiKey
+      ? `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(cartoApiKey)}`
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+
+    L.tileLayer(cartoTileUrl, {
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
+      subdomains: 'abcd',
+      maxZoom: 19,
+    }).addTo(map);
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
