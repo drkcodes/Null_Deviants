@@ -2390,7 +2390,7 @@ def _build_live_prediction_context(
         persistent_history_context = pd.DataFrame(
             get_station_feature_history_batch(
                 persistent_station_ids,
-                limit=672,
+                limit=192,
             )
         )
 
